@@ -191,6 +191,7 @@ struct MusicSection: View {
                         .controlSize(.small)
                         .frame(width: 160)
                         .disabled(store.isMusicBusy)
+                    PlaylistCoverButton(store: store)
                 }
             }
 

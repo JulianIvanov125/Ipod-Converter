@@ -347,6 +347,21 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var coverMakerTitle: String { t("Playlist cover", "Обложка плейлиста", "Обкладинка плейлиста", "Вокладка плэйліста") }
+    static var coverMakerHelp: String { t("Make a cover for this playlist", "Сделать обложку для плейлиста", "Зробити обкладинку для плейлиста", "Зрабіць вокладку для плэйліста") }
+    static var coverText: String { t("Text", "Текст", "Текст", "Тэкст") }
+    static var coverSubtitle: String { t("Caption (optional)", "Подпись (необязательно)", "Підпис (необов’язково)", "Подпіс (неабавязкова)") }
+    static var coverFromArtwork: String { t("From your track covers", "Из обложек ваших треков", "З обкладинок ваших треків", "З вокладак вашых трэкаў") }
+    static var coverColor1: String { t("Color 1", "Цвет 1", "Колір 1", "Колер 1") }
+    static var coverColor2: String { t("Color 2", "Цвет 2", "Колір 2", "Колер 2") }
+    static var copyImage: String { t("Copy", "Скопировать", "Скопіювати", "Скапіяваць") }
+    static var saveCover: String { t("Save", "Сохранить", "Зберегти", "Захаваць") }
+    static var coverHowTo: String {
+        t("Music doesn't let apps set playlist covers. Open the playlist in Music, click its cover and drop this picture there.",
+          "«Музыка» не даёт программам ставить обложку плейлиста. Откройте плейлист в «Музыке», нажмите на его обложку и перетащите туда эту картинку.",
+          "«Музика» не дозволяє програмам ставити обкладинку плейлиста. Відкрийте плейлист у «Музиці», натисніть на його обкладинку й перетягніть туди цю картинку.",
+          "«Музыка» не дае праграмам ставіць вокладку плэйліста. Адкрыйце плэйліст у «Музыцы», націсніце на яго вокладку і перацягніце туды гэтую карцінку.")
+    }
     static var processTimedOut: String {
         t("the file took too long to read — it may be damaged or the disk is too slow",
           "файл читается слишком долго — возможно, он повреждён или диск слишком медленный",

@@ -253,6 +253,24 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-cover"), args.count > i + 1 {
+            // Примеры обложек плейлиста в PNG.
+            let dir = URL(fileURLWithPath: args[i + 1])
+            Task { @MainActor in
+                let p = CoverPresets.all
+                let designs: [(String, CoverDesign)] = [
+                    ("gradient", CoverDesign(title: "Lana Del Rey Mood", subtitle: "Ultraviolence", top: p[0].0, bottom: p[0].1, background: .gradient)),
+                    ("glow", CoverDesign(title: "Для бега", top: p[4].0, bottom: p[5].1, background: .glow)),
+                    ("solid", CoverDesign(title: "Chill", subtitle: "iPod nano 7", top: p[2].0, bottom: p[2].1, background: .solid)),
+                ]
+                for (name, d) in designs {
+                    if let data = CoverRenderer.png(d) { try? data.write(to: dir.appendingPathComponent("cover-\(name).png")) }
+                }
+                print("обложки сохранены")
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-detect") {
             // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
             Task { @MainActor in
