@@ -48,7 +48,7 @@ final class IPodDetector {
 
     func start() {
         guard timer == nil else { return }
-        refresh()
+        refreshNow()
         // Опрос раз в 2 с — дёшево и надёжнее, чем подписка на события IOKit из SwiftUI-приложения.
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             MainActor.assumeIsolated { IPodDetector.shared.refresh() }
@@ -58,22 +58,59 @@ final class IPodDetector {
     func isConnected(_ m: IPodModel) -> Bool { devices.contains { $0.model == m } }
     func device(for m: IPodModel) -> ConnectedIPod? { devices.first { $0.model == m } }
 
+    /// Результат одного опроса (считается в фоне).
+    struct Scan: Sendable {
+        var serials: Set<String>
+        var denied: Bool
+        var unknown: Bool
+        var found: [ConnectedIPod]
+    }
+
+    @ObservationIgnored private var scanning = false
+    private static let queue = DispatchQueue(label: "local.ipodconverter.detect", qos: .utility)
+
+    /// Опрос в фоне: USB и диски iPod бывают медленными — главный поток (интерфейс) не ждёт.
     func refresh() {
-        let denied = Self.volumeAccessDenied()
-        if denied != accessDenied { accessDenied = denied }
+        guard !scanning else { return }
+        scanning = true
+        let prefer = preferEnhanced5G(), overrides = Self.savedOverrides()
+        Self.queue.async {
+            let r = Self.scan(preferEnhanced5G: prefer, overrides: overrides)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    IPodDetector.shared.scanning = false
+                    IPodDetector.shared.apply(r)
+                }
+            }
+        }
+    }
+
+    /// Сразу, на текущем потоке (первый опрос при запуске и самотесты).
+    func refreshNow() {
+        apply(Self.scan(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides()))
+    }
+
+    nonisolated static func scan(preferEnhanced5G: Bool, overrides: [String: String]) -> Scan {
+        // USB перебираем один раз за опрос и передаём дальше.
+        let usb = usbDevices()
+        let denied = volumeAccessDenied(usb: usb)
+        let serials = Set(usb.filter { model(forUSB: $0.pid, modelNumbers: []) != nil }.map(\.serial))
+        return Scan(serials: serials, denied: denied, unknown: hasUnrecognizedIPod(usb: usb),
+                    found: denied ? [] : detect(preferEnhanced5G: preferEnhanced5G, overrides: overrides, usb: usb))
+    }
+
+    private func apply(_ r: Scan) {
+        if r.denied != accessDenied { accessDenied = r.denied }
         // Новое подключение iPod при запрете доступа — предложить разрешить заново.
-        let serials = Set(Self.usbDevices().filter { Self.model(forUSB: $0.pid, modelNumbers: []) != nil }.map(\.serial))
         // При запуске не спрашиваем (пользователь уже ответил) — только при подключении/смене iPod.
-        if denied && didFirstScan && !serials.subtracting(lastSerials).isEmpty { askPermission = true }
-        if serials.isEmpty { askPermission = false }
-        lastSerials = serials
+        if r.denied && didFirstScan && !r.serials.subtracting(lastSerials).isEmpty { askPermission = true }
+        if r.serials.isEmpty { askPermission = false }
+        lastSerials = r.serials
         didFirstScan = true
-        let unknown = Self.hasUnrecognizedIPod()
-        if unknown != unknownIPod { unknownIPod = unknown }
-        let found = denied ? [] : Self.detect(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides())
-        guard found != devices else { return }
+        if r.unknown != unknownIPod { unknownIPod = r.unknown }
+        guard r.found != devices else { return }
         let old = Set(connected)
-        devices = found
+        devices = r.found
         let now = Set(connected)
         for m in connected where !old.contains(m) { onConnect?(m) }
         for m in old where !now.contains(m) { onDisconnect?(m) }
@@ -123,12 +160,14 @@ final class IPodDetector {
 
     // MARK: Определение
 
-    nonisolated static func detect(preferEnhanced5G: Bool = false, overrides: [String: String] = [:]) -> [ConnectedIPod] {
+    nonisolated static func detect(preferEnhanced5G: Bool = false, overrides: [String: String] = [:],
+                                   usb allUSB: [(pid: Int, serial: String, name: String)]? = nil) -> [ConnectedIPod] {
+        // Только iPod (хабы, мониторы и прочие устройства Apple не мешают сопоставлению с дисками).
+        let usb = (allUSB ?? usbDevices()).filter { model(forUSB: $0.pid, modelNumbers: []) != nil }
+        guard !usb.isEmpty else { return [] }      // нет iPod — диски не трогаем
         let volumes = mountedIPods()
         var usedVolumes = Set<String>()
         var result: [ConnectedIPod] = []
-        // Только iPod (хабы, мониторы и прочие устройства Apple не мешают сопоставлению с дисками).
-        let usb = usbDevices().filter { model(forUSB: $0.pid, modelNumbers: []) != nil }
         for dev in usb {
             // Диск этого iPod: по GUID из SysInfo; иначе — единственный «незанятый» iPod-диск.
             var vol = volumes.first { !$0.guid.isEmpty && $0.guid == dev.serial }
@@ -178,13 +217,13 @@ final class IPodDetector {
 
     /// iPod, смонтированные как диски: GUID и номер модели из SysInfo / SysInfoExtended, имя из iTunesDB.
     /// Устройство с USB-именем «iPod», которое не сопоставилось ни с одной моделью с видео.
-    nonisolated static func hasUnrecognizedIPod() -> Bool {
-        usbDevices().contains { $0.name.localizedCaseInsensitiveContains("iPod") && model(forUSB: $0.pid, modelNumbers: []) == nil }
+    nonisolated static func hasUnrecognizedIPod(usb: [(pid: Int, serial: String, name: String)]? = nil) -> Bool {
+        (usb ?? usbDevices()).contains { $0.name.localizedCaseInsensitiveContains("iPod") && model(forUSB: $0.pid, modelNumbers: []) == nil }
     }
 
     /// Подключён iPod (по USB), а прочитать съёмный диск не дают — значит, пользователь запретил доступ.
-    nonisolated static func volumeAccessDenied() -> Bool {
-        guard usbDevices().contains(where: { model(forUSB: $0.pid, modelNumbers: []) != nil }) else { return false }
+    nonisolated static func volumeAccessDenied(usb: [(pid: Int, serial: String, name: String)]? = nil) -> Bool {
+        guard (usb ?? usbDevices()).contains(where: { model(forUSB: $0.pid, modelNumbers: []) != nil }) else { return false }
         let keys: [URLResourceKey] = [.volumeIsRemovableKey, .volumeIsEjectableKey, .volumeIsInternalKey]
         let vols = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
         for v in vols {
@@ -204,6 +243,14 @@ final class IPodDetector {
         return vols.compactMap { v in
             let root = "/Volumes/\(v)"
             guard FileManager.default.fileExists(atPath: root + "/iPod_Control") else { return nil }
+            // Читаем SysInfo и базу iPod, только если эти файлы изменились с прошлого опроса.
+            let files = ["/iPod_Control/Device/SysInfo", "/iPod_Control/Device/SysInfoExtended",
+                         "/iPod_Control/iTunes/iTunesDB", "/iPod_Control/iTunes/iTunes Library.itlp/Library.itdb"]
+            let signature = files.map { f -> String in
+                let a = try? FileManager.default.attributesOfItem(atPath: root + f)
+                return "\((a?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)/\(a?[.size] as? Int ?? -1)"
+            }.joined(separator: "|")
+            if let cached = VolumeInfoCache.shared.get(root, signature) { return cached }
             var guid = "", number = ""
             if let text = try? String(contentsOfFile: root + "/iPod_Control/Device/SysInfo", encoding: .utf8) {
                 for line in text.split(separator: "\n") {
@@ -223,7 +270,9 @@ final class IPodDetector {
                let g = plist["FireWireGUID"] as? String {
                 guid = g.replacingOccurrences(of: "0x", with: "").uppercased()
             }
-            return MountedIPod(path: root, guid: guid, modelNumber: number, name: deviceName(root))
+            let info = MountedIPod(path: root, guid: guid, modelNumber: number, name: deviceName(root))
+            VolumeInfoCache.shared.set(root, signature, info)
+            return info
         }
     }
 
@@ -307,5 +356,23 @@ final class IPodDetector {
         case 0x12AA, 0x12AB: return .touch5             // touch 5G и новее
         default: return nil                              // nano 6 (без видео) и прочие устройства Apple
         }
+    }
+}
+
+/// Данные смонтированных iPod (GUID, модель, имя) — пока файлы на диске не менялись.
+final class VolumeInfoCache: @unchecked Sendable {
+    static let shared = VolumeInfoCache()
+    private let lock = NSLock()
+    private var items: [String: (signature: String, info: IPodDetector.MountedIPod)] = [:]
+
+    func get(_ root: String, _ signature: String) -> IPodDetector.MountedIPod? {
+        lock.lock(); defer { lock.unlock() }
+        guard let e = items[root], e.signature == signature else { return nil }
+        return e.info
+    }
+
+    func set(_ root: String, _ signature: String, _ info: IPodDetector.MountedIPod) {
+        lock.lock(); defer { lock.unlock() }
+        items[root] = (signature, info)
     }
 }

@@ -144,12 +144,20 @@ final class LevelSmoother {
     /// Скачки этого кадра: полоса и сила (0…1); band == -1 — удар баса.
     func update(time: Double) -> [(band: Int, strength: Float)] {
         let raw = AudioAnalyzer.shared.snapshot()
+        // Сглаживание настроено под 60 кадров/с; при другой частоте кадров пересчитываем
+        // коэффициенты по реальному времени — скорость реакции одинаковая на любом экране и на паузе.
+        let dt = lastTime == 0 ? 1.0 / 60 : min(0.1, max(0.001, time - lastTime))
+        lastTime = time
+        let f = Float(dt * 60)
+        func k(_ perFrame: Float) -> Float { 1 - pow(1 - perFrame, f) }
+        let (atk, rel, top, flowA0, flowA1, flowA2, flowR0, flowR1, kickUp, kickDown) =
+            (k(0.75), k(0.2), k(0.6), k(0.35), k(0.22), k(0.12), k(0.12), k(0.05), k(0.7), k(0.14))
         var onsets: [(Int, Float)] = []
         for i in 0..<Self.n {
             let v = raw[i]
             // Быстрая атака, спад средний — живо, но без дрожи на месте.
-            levels[i] = v > levels[i] ? levels[i] + (v - levels[i]) * 0.75 : levels[i] * 0.8 + v * 0.2
-            peaks[i] = max(levels[i], peaks[i] - 0.012)
+            levels[i] += (v - levels[i]) * (v > levels[i] ? atk : rel)
+            peaks[i] = max(levels[i], peaks[i] - 0.012 * f)
             // Скачок: резкий рост в полосе, громче порога, не чаще раза в 0.3 с на полосу.
             let rise = v - prevRaw[i]
             if rise > 0.1, v > 0.35, time > cooldown[i] {
@@ -164,13 +172,13 @@ final class LevelSmoother {
         // (окно 24 дБ). Потолок быстро поднимается и медленно опускается — без «качания» всей картинки.
         let db = AudioAnalyzer.shared.snapshotDB()
         let frameTop = db.max() ?? -120
-        eqTop = frameTop > eqTop ? eqTop + (frameTop - eqTop) * 0.6 : max(frameTop, eqTop - 0.25)
+        eqTop = frameTop > eqTop ? eqTop + (frameTop - eqTop) * top : max(frameTop, eqTop - 0.25 * f)
         let window: Float = 24
         for i in 0..<Self.n {
             let quiet = max(0, min(1, (eqTop + 70) / 20))   // совсем тихо — столбики опускаются
             let v = max(0, min(1, (db[i] - (eqTop - window)) / window)) * quiet
-            eq[i] = v > eq[i] ? eq[i] + (v - eq[i]) * 0.75 : eq[i] * 0.8 + v * 0.2
-            eqPeaks[i] = max(eq[i], eqPeaks[i] - 0.012)
+            eq[i] += (v - eq[i]) * (v > eq[i] ? atk : rel)
+            eqPeaks[i] = max(eq[i], eqPeaks[i] - 0.012 * f)
         }
 
         let bass = raw[0..<8].reduce(0, +) / 8
@@ -180,7 +188,7 @@ final class LevelSmoother {
             bassCooldown = time + 0.18
             pulse = min(1, pulse + 0.9)
         }
-        pulse *= 0.9
+        pulse *= pow(0.9, f)
         prevBass = bass
 
         // Резкий звук «размазывается» по соседним полосам — склеиваем соседние скачки
@@ -208,17 +216,15 @@ final class LevelSmoother {
         labels = labels.filter { time - $0.value.t < 0.6 }
 
         // Течение цвета: громкость сглажена на ~1 с (без мерцания), а в ритм ускоряется движение.
-        let dt = lastTime == 0 ? 0 : min(0.1, max(0, time - lastTime))
-        lastTime = time
         for k in 0..<Self.flowGroups.count {
             let e = energy(Self.flowGroups[k])
             // Низы реагируют быстрее и сильнее, верх — спокойнее.
-            let attack: Float = k == 0 ? 0.35 : k == 1 ? 0.22 : 0.12
-            let release: Float = k == 0 ? 0.12 : 0.05
+            let attack = k == 0 ? flowA0 : k == 1 ? flowA1 : flowA2
+            let release = k == 0 ? flowR0 : flowR1
             flowLevel[k] += (e - flowLevel[k]) * (e > flowLevel[k] ? attack : release)
             flowPhase[k] += dt * (0.27 + Double(flowLevel[k]) * 2.25 + Double(kick) * (k == 0 ? 3.5 : k == 1 ? 1.8 : 0.8))
         }
-        kick += (pulse - kick) * (pulse > kick ? 0.7 : 0.14)
+        kick += (pulse - kick) * (pulse > kick ? kickUp : kickDown)
         return onsets
     }
 
@@ -299,7 +305,9 @@ struct AudioVisualizer: View {
     @State private var water = WaterSurface()
 
     var body: some View {
-        TimelineView(.animation) { (timeline: TimelineViewDefaultContext) in
+        // Во время игры — с частотой экрана (60 Гц, 120 Гц на ProMotion); сглаживание считается по времени,
+        // поэтому реакция одинаковая. На паузе — 20 кадров/с: всё плавно гаснет и почти не нагружает Mac.
+        TimelineView(.animation(minimumInterval: PlayerController.shared.isPlaying ? nil : 1.0 / 20)) { (timeline: TimelineViewDefaultContext) in
             Canvas { (ctx: inout GraphicsContext, size: CGSize) in
                 render(&ctx, size: size, t: timeline.date.timeIntervalSinceReferenceDate)
             }

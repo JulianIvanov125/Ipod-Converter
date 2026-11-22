@@ -170,6 +170,23 @@ enum SelfTest {
             }
             return true
         }
+        if args.contains("--selftest-detect") {
+            // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
+            Task { @MainActor in
+                let d = IPodDetector.shared
+                d.refreshNow()
+                let t0 = Date()
+                for _ in 0..<10 { d.refreshNow() }
+                func ms(_ f: () -> Void) -> Double { let t = Date(); for _ in 0..<10 { f() }; return Date().timeIntervalSince(t) * 100 }
+                let usb = IPodDetector.usbDevices()
+                print(String(format: "usb %.2f, доступ %.2f, диски %.2f, detect %.2f мс",
+                             ms { _ = IPodDetector.usbDevices() }, ms { _ = IPodDetector.volumeAccessDenied(usb: usb) },
+                             ms { _ = IPodDetector.mountedIPods() }, ms { _ = IPodDetector.detect(usb: usb) }))
+                print(String(format: "опрос iPod: %.1f мс за раз; найдено: %@", Date().timeIntervalSince(t0) * 100,
+                             d.devices.map { "\($0.model.rawValue) «\($0.name ?? "-")»" }.joined(separator: ", ")))
+                exit(0)
+            }
+        }
         if let i = args.firstIndex(of: "--selftest-water"), args.count > i + 1 {
             // Модель воды без звука: капли по расписанию, кадры в PNG 1600×900, время кадра.
             let dir = URL(fileURLWithPath: args[i + 1])
