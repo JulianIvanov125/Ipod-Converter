@@ -12,7 +12,10 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if store.section == .music {
+            if !store.hasIPod {
+                // Ни одного iPod во вкладках — сначала выбрать, файлы добавлять нельзя.
+                NoIPodPlaceholder { showCatalog = true }
+            } else if store.section == .music {
                 MusicSection(store: store, isTargeted: isTargeted)
             } else if store.items.isEmpty {
                 DropPlaceholder(isTargeted: isTargeted, title: L.dropHere, subtitle: L.orClick) { store.openPanel() }
@@ -72,9 +75,10 @@ struct ContentView: View {
         .background(WindowBackground())
         .foregroundStyle(ink)
         .dropDestination(for: URL.self) { urls, _ in
+            guard store.hasIPod else { showCatalog = true; return false }
             store.add(urls)
             return !urls.isEmpty
-        } isTargeted: { isTargeted = $0 }
+        } isTargeted: { isTargeted = $0 && store.hasIPod }
     }
 
     private var header: some View {
@@ -263,7 +267,7 @@ struct IPodTabs: View {
                     },
                     selected: store.model == m,
                     canSelect: !store.isBusy,
-                    canRemove: store.favoriteModels.count > 1,
+                    canRemove: true,
                     onSelect: { store.model = m },
                     onRemove: {
                         if store.isConverting(for: m) { pendingRemoval = m } else { store.removeTab(m) }
@@ -414,7 +418,6 @@ struct CatalogView: View {
 
     private func row(_ m: IPodModel) -> some View {
         let fav = store.isFavorite(m)
-        let isLast = fav && store.favoriteModels.count == 1
         return Button {
             store.toggleFavorite(m)
         } label: {
@@ -445,8 +448,33 @@ struct CatalogView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isLast)
-        .help(isLast ? L.keepOne : "")
+
+    }
+}
+
+// MARK: - Не выбран ни один iPod
+
+struct NoIPodPlaceholder: View {
+    let onPick: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle().fill(Color.accentColor.opacity(0.08)).frame(width: 128, height: 128)
+                Image(systemName: "ipod").font(.system(size: 50, weight: .light)).foregroundStyle(Color.accentColor)
+            }
+            VStack(spacing: 6) {
+                Text(L.noIPodTitle).font(.system(size: 22, weight: .semibold))
+                Text(L.noIPodSubtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).frame(maxWidth: 420)
+            }
+            Button(action: onPick) {
+                Label(L.noIPodButton, systemImage: "star")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 }
 

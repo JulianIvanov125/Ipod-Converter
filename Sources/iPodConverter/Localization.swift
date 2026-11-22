@@ -290,6 +290,14 @@ enum L {
           "5G і 5.5G не адрозніць аўтаматычна — удакладніце правым клікам.")
     }
     static func thisIs(_ m: String) -> String { t("This is \(m)", "Это \(m)", "Це \(m)", "Гэта \(m)") }
+    static var noIPodTitle: String { t("Choose your iPod", "Выберите iPod", "Виберіть iPod", "Выберыце iPod") }
+    static var noIPodSubtitle: String {
+        t("Star your iPod in “List iPods picks” — then you can add files. A connected iPod is added automatically.",
+          "Отметьте свой iPod звёздочкой в «List iPods picks» — после этого можно добавлять файлы. Подключённый iPod добавляется сам.",
+          "Позначте свій iPod зірочкою в «List iPods picks» — після цього можна додавати файли. Підключений iPod додається сам.",
+          "Адзначце свой iPod зорачкай у «List iPods picks» — пасля гэтага можна дадаваць файлы. Падключаны iPod дадаецца сам.")
+    }
+    static var noIPodButton: String { t("Choose iPod", "Выбрать iPod", "Вибрати iPod", "Выбраць iPod") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

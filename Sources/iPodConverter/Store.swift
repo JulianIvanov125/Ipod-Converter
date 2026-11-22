@@ -321,7 +321,7 @@ final class Store {
     func iPodConnected(_ m: IPodModel) {
         guard !dismissedConnected.contains(m) else { return }
         if !favorites.contains(m) { favorites.insert(m) }
-        if !isBusy { model = m }
+        if !isBusy || favorites.count == 1 { model = m }
     }
 
     func iPodDisconnected(_ m: IPodModel) {
@@ -329,7 +329,7 @@ final class Store {
     }
 
     func removeTab(_ m: IPodModel) {
-        guard favorites.contains(m), favorites.count > 1 else { return }
+        guard favorites.contains(m) else { return }   // закрыть можно и последнюю вкладку
         // Закрыли вкладку подключённого iPod — не навязываем её снова, пока его не переподключат.
         if IPodDetector.shared.isConnected(m) { dismissedConnected.insert(m) }
         for item in items where item.isConverting && item.usedModel == m { item.cancel() }
@@ -337,13 +337,17 @@ final class Store {
         toggleFavorite(m)
     }
 
+    /// Хотя бы одна вкладка iPod выбрана. Без неё файлы не добавляются (экран «Выберите iPod»).
+    var hasIPod: Bool { !favorites.isEmpty }
+
     func toggleFavorite(_ m: IPodModel) {
         if favorites.contains(m) {
-            guard favorites.count > 1 else { return }
             favorites.remove(m)
-            if model == m { model = favoriteModels.first ?? .classic5G }
+            if model == m, let first = favoriteModels.first { model = first }
         } else {
+            let wasEmpty = favorites.isEmpty
             favorites.insert(m)
+            if wasEmpty { model = m }   // первый выбранный iPod — сразу активный
         }
     }
 
@@ -435,8 +439,9 @@ final class Store {
         addToMusic = UserDefaults.standard.object(forKey: "addToMusic") as? Bool ?? true
         maxQuality = UserDefaults.standard.bool(forKey: "maxQuality")
         let saved = (UserDefaults.standard.stringArray(forKey: "favorites") ?? []).compactMap(IPodModel.init(rawValue:))
-        favorites = Set(saved.isEmpty ? IPodModel.defaultFavorites : saved)
-        if !favorites.contains(model) { favorites.insert(model) }
+        // Первый запуск — вкладки по умолчанию; если пользователь закрыл все — оставляем пусто.
+        let firstLaunch = UserDefaults.standard.object(forKey: "favorites") == nil
+        favorites = Set(firstLaunch ? IPodModel.defaultFavorites : saved)
         let detector = IPodDetector.shared
         detector.onConnect = { [weak self] m in self?.iPodConnected(m) }
         detector.preferEnhanced5G = { [weak self] in
@@ -455,6 +460,7 @@ final class Store {
 
     /// Принимает файлы и папки: аудио уходит в «Музыку», остальное — в «Видео».
     func add(_ urls: [URL]) {
+        guard hasIPod else { return }   // сначала выбрать iPod
         var addedAudio = 0, addedVideo = 0
         let files = Self.expand(urls)
         for file in files {
@@ -776,6 +782,7 @@ final class Store {
     }
 
     func openPanel() {
+        guard hasIPod else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         if section == .music {
