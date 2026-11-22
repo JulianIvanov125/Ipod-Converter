@@ -93,11 +93,23 @@ final class AudioOutputSettings {
     var kbps: Int {
         didSet { UserDefaults.standard.set(kbps, forKey: "audioKbps") }
     }
+    /// Частота дискретизации на выходе: 0 — как в пресете (44.1 для 44.1-семейства, иначе 48), 44100 или 48000.
+    var sampleRate: Int {
+        didSet { UserDefaults.standard.set(sampleRate, forKey: "audioRate") }
+    }
+    static let sampleRates = [0, 44100, 48000]
+
+    /// Пользователь что-то поменял относительно пресета iPod.
+    var isCustom: Bool { choice != .auto || sampleRate != 0 }
+
+    func reset() { choice = .auto; kbps = 256; sampleRate = 0 }
 
     private init() {
         choice = AudioFormatChoice(rawValue: UserDefaults.standard.string(forKey: "audioFormat") ?? "") ?? .auto
         let saved = UserDefaults.standard.integer(forKey: "audioKbps")
         kbps = Self.bitrates.contains(saved) ? saved : 256
+        let rate = UserDefaults.standard.integer(forKey: "audioRate")
+        sampleRate = Self.sampleRates.contains(rate) ? rate : 0
     }
 }
 
@@ -116,11 +128,11 @@ enum AudioRules {
     @MainActor
     static func plan(for info: AudioInfo, model: IPodModel) -> AudioPlan {
         let s = AudioOutputSettings.shared
-        return plan(for: info, model: model, choice: s.choice, kbps: s.kbps)
+        return plan(for: info, model: model, choice: s.choice, kbps: s.kbps, rateOverride: s.sampleRate)
     }
 
-    static func plan(for info: AudioInfo, model: IPodModel, choice: AudioFormatChoice, kbps: Int) -> AudioPlan {
-        let rate = targetRate(info.sampleRate)
+    static func plan(for info: AudioInfo, model: IPodModel, choice: AudioFormatChoice, kbps: Int, rateOverride: Int = 0) -> AudioPlan {
+        let rate = rateOverride > 0 ? rateOverride : targetRate(info.sampleRate)
         let playable = playsAsIs(info, model: model)
         let srcKbps = (info.bitrate ?? Int.max) / 1000
         switch choice {

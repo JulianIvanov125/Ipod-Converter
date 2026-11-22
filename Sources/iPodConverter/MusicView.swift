@@ -83,7 +83,6 @@ struct MusicSection: View {
 
             Spacer()
             MetaToggle()
-            FormatPicker().disabled(store.isMusicBusy)
             Button(L.clearList) { store.clearTracks() }
                 .buttonStyle(.link)
                 .font(.system(size: 12))
@@ -148,6 +147,8 @@ struct MusicSection: View {
             .buttonStyle(.bordered)
 
             OutputFolderControl(store: store)
+
+            MusicOutputButton(store: store)
 
             if let status = store.musicBatchStatus {
                 Label(status.text, systemImage: status.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -231,6 +232,73 @@ struct MetaToggle: View {
         .toggleStyle(.checkbox)
         .controlSize(.small)
         .help(L.metaHelp)
+    }
+}
+
+/// «⚙︎ Выход» для музыки — как у видео: формат, битрейт, частота.
+struct MusicOutputButton: View {
+    @Bindable var store: Store
+    @Bindable private var out = AudioOutputSettings.shared
+    @State private var open = false
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            Label(out.isCustom ? L.outMusicSummary(out) : L.outPreset(store.model.title), systemImage: "gearshape")
+                .font(.system(size: 12))
+                .foregroundStyle(out.isCustom ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isMusicBusy)
+        .help(L.formatHelp)
+        .popover(isPresented: $open, arrowEdge: .top) {
+            MusicOutputView(store: store)
+        }
+    }
+}
+
+struct MusicOutputView: View {
+    @Bindable var store: Store
+    @Bindable private var out = AudioOutputSettings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L.outMusicTitle).font(.system(size: 13, weight: .semibold))
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    Text(L.formatLabel).font(.system(size: 12)).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
+                    Picker("", selection: $out.choice) {
+                        ForEach(AudioFormatChoice.allCases) { c in
+                            Text(c == .auto ? L.outAutoPreset(store.model.title) : c.title).tag(c)
+                        }
+                    }
+                }
+                GridRow {
+                    Text(L.colBitrate).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Picker("", selection: $out.kbps) {
+                        ForEach(AudioOutputSettings.bitrates, id: \.self) { k in Text("\(k) \(L.kbps)").tag(k) }
+                    }
+                    .disabled(!out.choice.usesBitrate)
+                }
+                GridRow {
+                    Text(L.outSampleRate).font(.system(size: 12)).foregroundStyle(.secondary)
+                    Picker("", selection: $out.sampleRate) {
+                        ForEach(AudioOutputSettings.sampleRates, id: \.self) { r in
+                            Text(r == 0 ? L.outAsPreset : (r == 44100 ? "44.1 \(L.kHz)" : "48 \(L.kHz)")).tag(r)
+                        }
+                    }
+                }
+            }
+            .labelsHidden()
+            Divider()
+            Text(L.formatHelp).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(L.outMusicKeepsCompatible).font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button(L.outReset) { out.reset() }.disabled(!out.isCustom)
+            }
+        }
+        .padding(16)
+        .frame(width: 430)
     }
 }
 

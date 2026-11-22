@@ -229,6 +229,19 @@ enum L {
         t("Nothing is checked — tick files in “All”", "Ничего не отмечено — отметьте файлы во «Все»",
           "Нічого не позначено — позначте файли в «Усі»", "Нічога не адзначана — адзначце файлы ва «Усе»")
     }
+    static var outMusicTitle: String { t("Music output", "Выход для музыки", "Вихід для музики", "Выхад для музыкі") }
+    static var outSampleRate: String { t("Sample rate", "Частота", "Частота", "Частата") }
+    static func outAutoPreset(_ m: String) -> String { t("Auto (\(m) preset)", "Авто (пресет \(m))", "Авто (пресет \(m))", "Аўта (прэсэт \(m))") }
+    static var outMusicKeepsCompatible: String {
+        t("Files copied as is keep their own sample rate.", "Файлы, которые копируются как есть, сохраняют свою частоту.",
+          "Файли, що копіюються як є, зберігають свою частоту.", "Файлы, якія капіююцца як ёсць, захоўваюць сваю частату.")
+    }
+    @MainActor static func outMusicSummary(_ o: AudioOutputSettings) -> String {
+        var parts = [o.choice == .auto ? "Auto" : o.choice.title]
+        if o.choice.usesBitrate { parts.append("\(o.kbps) \(kbps)") }
+        if o.sampleRate > 0 { parts.append(o.sampleRate == 44100 ? "44.1 \(kHz)" : "48 \(kHz)") }
+        return t("Output: ", "Выход: ", "Вихід: ", "Выхад: ") + parts.joined(separator: " · ")
+    }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

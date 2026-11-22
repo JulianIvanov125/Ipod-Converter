@@ -218,11 +218,12 @@ enum SelfTest {
         // необязательно: --format aac:128 / mp3:320 / alac / auto
         let savedFormat = UserDefaults.standard.object(forKey: "audioFormat")
         let savedKbps = UserDefaults.standard.object(forKey: "audioKbps")
+        let savedRate = UserDefaults.standard.object(forKey: "audioRate")
         defer {
             // Возвращаем настройки пользователя после изменения ниже (запись — в didSet).
         }
         restoreSettings = {
-            for (k, v) in [("audioFormat", savedFormat), ("audioKbps", savedKbps)] {
+            for (k, v) in [("audioFormat", savedFormat), ("audioKbps", savedKbps), ("audioRate", savedRate)] {
                 if let v { UserDefaults.standard.set(v, forKey: k) } else { UserDefaults.standard.removeObject(forKey: k) }
             }
         }
@@ -230,6 +231,7 @@ enum SelfTest {
             let parts = args[f + 1].split(separator: ":")
             AudioOutputSettings.shared.choice = AudioFormatChoice(rawValue: String(parts[0])) ?? .auto
             if parts.count > 1, let k = Int(parts[1]) { AudioOutputSettings.shared.kbps = k }
+            if parts.count > 2, let r = Int(parts[2]) { AudioOutputSettings.shared.sampleRate = r }
         }
         let out = URL(fileURLWithPath: args[i + 2])
         let files = args[(i + 3)...].filter { !$0.hasPrefix("--") && !$0.contains(":") && !["auto", "alac"].contains($0) }
