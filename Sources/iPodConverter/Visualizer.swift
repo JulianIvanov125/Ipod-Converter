@@ -132,7 +132,8 @@ final class LevelSmoother {
     /// Толчок на удар баса, 0…1, гаснет за ~0.4 с.
     private(set) var pulse: Float = 0
     /// Цвета обложки: части спектра, медленная громкость каждой и накопленная «фаза течения».
-    static let flowGroups: [Range<Int>] = [0..<6, 6..<14, 14..<24, 24..<36, 36..<n]
+    static let flowGroups: [Range<Int>] = [0..<edge(85), edge(85)..<edge(230), edge(230)..<edge(800),
+                                           edge(800)..<edge(3600), edge(3600)..<n]
     private(set) var flowLevel = [Float](repeating: 0, count: 5)
     private(set) var flowPhase = [Double](repeating: 0, count: 5)
     private var lastTime: Double = 0
@@ -189,7 +190,7 @@ final class LevelSmoother {
             eqPeaks[i] = max(eq[i], eqPeaks[i] - 0.012 * f)
         }
 
-        let bass = raw[0..<8].reduce(0, +) / 8
+        let bass = raw[Self.bassBands].reduce(0, +) / Float(Self.bassBands.count)
         var bassHit = false
         if bass - prevBass > 0.06, bass > 0.33, time > bassCooldown {
             bassHit = true
@@ -203,7 +204,7 @@ final class LevelSmoother {
         // в одну каплю на самой громкой частоте. При ударе баса низ отдельно не считаем.
         var merged: [(Int, Float)] = []
         for o in onsets.sorted(by: { $0.0 < $1.0 }) {
-            if bassHit && o.0 < 12 { continue }
+            if bassHit && o.0 < Self.lowEnd { continue }
             if let last = merged.last, o.0 - last.0 <= 4 || (o.0 - (merged.last?.0 ?? 0)) <= 4 {
                 if o.1 > last.1 { merged[merged.count - 1] = o }
             } else {
@@ -264,9 +265,22 @@ final class LevelSmoother {
     }
 
     /// Центральная частота полосы, Гц.
+    /// Диапазон эквалайзера — весь слышимый: 20 Гц … 20 кГц.
+    static let lo = 20.0, hi = 20000.0
+
     static func hz(_ band: Int) -> Double {
-        40 * pow(16000.0 / 40, (Double(band) + 0.5) / Double(n))
+        lo * pow(hi / lo, (Double(band) + 0.5) / Double(n))
     }
+
+    /// Номер полосы, с которой начинается эта частота (для групп «бас / середина / верх»).
+    static func edge(_ hz: Double) -> Int {
+        max(0, min(n, Int((log(hz / lo) / log(hi / lo) * Double(n)).rounded())))
+    }
+    /// Удары баса: 35–110 Гц (бочка и бас-гитара).
+    static let bassBands = edge(35)..<edge(110)
+    /// До этой полосы — «низы» (подпрыгивание столбиков, цвет капель).
+    static let lowEnd = edge(180)
+    static let midEnd = edge(1700)
 
     static func label(_ hz: Double) -> String {
         if hz >= 10000 { return String(format: "%.0f kHz", hz / 1000) }
@@ -276,7 +290,7 @@ final class LevelSmoother {
 
     /// Дробный номер полосы для частоты (для шкалы).
     static func band(for hz: Double) -> Double {
-        log(hz / 40) / log(16000.0 / 40) * Double(n) - 0.5
+        log(hz / lo) / log(hi / lo) * Double(n) - 0.5
     }
 }
 
@@ -316,7 +330,7 @@ final class DropField {
             guard strength > 0.2 + (1 - i) * 0.12 else { continue }
             drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
                               strength: min(1.25, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
-                              colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
+                              colorIndex: bass ? 0 : o.band < LevelSmoother.lowEnd ? 0 : o.band < LevelSmoother.midEnd ? 1 : 2))
             // Пауза между каплями: в припеве короче, в куплете длиннее.
             next = time + (bass ? 0.15 : 0.2) * Double(1.8 - 1.0 * i)
             spawned += 1
@@ -387,7 +401,8 @@ struct AudioVisualizer: View {
                                         .init(color: accents[2], location: 1)])
         var heights = [CGFloat](repeating: 0, count: n)
         for i in 0..<n {
-            let boost = i < 12 ? CGFloat(smoother.kick) * 0.4 * (1 - CGFloat(i) / 12) : 0
+            let low = LevelSmoother.lowEnd
+            let boost = i < low ? CGFloat(smoother.kick) * 0.4 * (1 - CGFloat(i) / CGFloat(low)) : 0
             heights[i] = max(bw, min(1, pow(CGFloat(smoother.eq[i]), 2.0) + boost) * g.maxH)
         }
         func rect(_ i: Int) -> CGRect {
@@ -431,11 +446,12 @@ struct AudioVisualizer: View {
         }
     }
 
-    /// Шкала внизу: 50 Гц … 10 кГц.
+    /// Шкала внизу: 20 Гц … 20 кГц.
     private func drawAxis(_ ctx: GraphicsContext, _ size: CGSize) {
         let y = size.height - 12
-        for hz in [50.0, 100, 200, 500, 1000, 2000, 5000, 10000] {
-            let px = barCenterX(LevelSmoother.band(for: hz), size)
+        for hz in [20.0, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000] {
+            // Крайние подписи (20 Гц, 20 кГц) сдвигаем внутрь, чтобы не обрезались краем экрана.
+            let px = min(max(barCenterX(LevelSmoother.band(for: hz), size), 24), size.width - 28)
             ctx.stroke(Path { p in p.move(to: CGPoint(x: px, y: y - 13)); p.addLine(to: CGPoint(x: px, y: y - 8)) },
                        with: .color(.white.opacity(0.35)), lineWidth: 1)
             ctx.draw(Text(hz >= 1000 ? "\(Int(hz / 1000)) kHz" : "\(Int(hz)) Hz")
@@ -471,7 +487,7 @@ struct AudioVisualizer: View {
             let color: SIMD3<Float>
             let radius: Float
             if let hz = d.hz {
-                let u = Float(log(hz / 40) / log(16000.0 / 40))
+                let u = Float(log(hz / LevelSmoother.lo) / log(LevelSmoother.hi / LevelSmoother.lo))
                 color = u < 0.5 ? mix(tones[0], tones[1], u * 2) : mix(tones[1], tones[2], (u - 0.5) * 2)
                 radius = 4.0 - u * 1.4
             } else {

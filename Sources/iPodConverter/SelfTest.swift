@@ -281,7 +281,7 @@ enum SelfTest {
             let f = URL(fileURLWithPath: args[i + 1])
             Task { @MainActor in
                 let pc = PlayerController.shared
-                pc.player.isMuted = true
+                pc.player.volume = 0.001   // не mute: при mute macOS перестаёт отдавать звук анализатору
                 pc.play([PlayEntry(id: "viz", url: f, title: "Test Song", subtitle: "Test Artist · Original", artwork: nil, isVideo: false)], startAt: 0)
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 if let i = MPNowPlayingInfoCenter.default().nowPlayingInfo {

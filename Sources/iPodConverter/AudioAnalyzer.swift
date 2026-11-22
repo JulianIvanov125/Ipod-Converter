@@ -9,8 +9,9 @@ final class AudioAnalyzer: @unchecked Sendable {
     static let shared = AudioAnalyzer()
     static let bandCount = 48
 
-    private let fftSize = 1024
-    private let log2n: vDSP_Length = 10
+    /// 4096 сэмплов: шаг ~11 Гц при 44.1 кГц — различимы даже 20–40 Гц (с 1024 шаг был 43 Гц).
+    private let fftSize = 4096
+    private let log2n: vDSP_Length = 12
     private let setup: FFTSetup
     private var window: [Float]
     private var ring: [Float]           // последние fftSize сэмплов (моно)
@@ -28,14 +29,14 @@ final class AudioAnalyzer: @unchecked Sendable {
     private var lastUpdate: CFTimeInterval = 0
 
     private init() {
-        setup = vDSP_create_fftsetup(10, FFTRadix(kFFTRadix2))!
-        window = [Float](repeating: 0, count: 1024)
-        vDSP_hann_window(&window, vDSP_Length(1024), Int32(vDSP_HANN_NORM))
-        ring = [Float](repeating: 0, count: 1024)
-        work = [Float](repeating: 0, count: 1024)
-        real = [Float](repeating: 0, count: 512)
-        imag = [Float](repeating: 0, count: 512)
-        mags = [Float](repeating: 0, count: 512)
+        setup = vDSP_create_fftsetup(12, FFTRadix(kFFTRadix2))!
+        window = [Float](repeating: 0, count: 4096)
+        vDSP_hann_window(&window, vDSP_Length(4096), Int32(vDSP_HANN_NORM))
+        ring = [Float](repeating: 0, count: 4096)
+        work = [Float](repeating: 0, count: 4096)
+        real = [Float](repeating: 0, count: 2048)
+        imag = [Float](repeating: 0, count: 2048)
+        mags = [Float](repeating: 0, count: 2048)
     }
 
     /// Текущие полосы; если звук давно не приходил (пауза) — плавно гаснут.
@@ -133,12 +134,12 @@ final class AudioAnalyzer: @unchecked Sendable {
             }
         }
 
-        // Полосы в логарифмической шкале 40 Гц … 16 кГц → дБ → 0…1.
+        // Полосы в логарифмической шкале 20 Гц … 20 кГц → дБ → 0…1.
         let count = Self.bandCount
         let binHz = sampleRate / Double(fftSize)
         var out = [Float](repeating: 0, count: count)
         var outDB = [Float](repeating: -120, count: count)
-        let lo = 40.0, hi = min(16000.0, sampleRate / 2 - binHz)
+        let lo = LevelSmoother.lo, hi = min(LevelSmoother.hi, sampleRate / 2 - binHz)
         for b in 0..<count {
             let f0 = lo * pow(hi / lo, Double(b) / Double(count))
             let f1 = lo * pow(hi / lo, Double(b + 1) / Double(count))
