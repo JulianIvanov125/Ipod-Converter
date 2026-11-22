@@ -151,7 +151,7 @@ enum FFmpeg {
             args += ["-i", url.path, "-map", "0:\(idx)"]
         } else {
             let t = min(info.duration * 0.15, 30)
-            args += ["-ss", String(format: "%.2f", t), "-i", url.path, "-map", "0:V:0"]
+            args += ["-ss", String(format: "%.2f", t)] + decodeArgs(info) + ["-i", url.path, "-map", "0:V:0"]
         }
         let data = try? await capture(ffmpeg, args + out)
         return (data?.isEmpty ?? true) ? nil : data
@@ -162,7 +162,7 @@ enum FFmpeg {
     static func arguments(input: URL, output: URL, info: MediaInfo, settings model: EncodeSettings,
                           cover: URL?, meta: VideoMeta? = nil) -> [String] {
         let size = model.outputSize(for: info)
-        var args = ["-hide_banner", "-nostdin", "-y", "-i", input.path]
+        var args = ["-hide_banner", "-nostdin", "-y"] + decodeArgs(info) + ["-i", input.path]
         if let cover { args += ["-i", cover.path] }
         let audioMap = info.audioStreamIndex.map { "0:\($0)" } ?? "0:a:0?"
         let deinterlace = info.interlaced ? "yadif," : ""
@@ -219,9 +219,29 @@ enum FFmpeg {
         }
     }
 
+    /// Причина ошибки из вывода ffmpeg. Последняя строка обычно общая («Conversion failed!»),
+    /// а причина — раньше: берём первую строку с ошибкой и убираем префикс вида «[av1 @ 0x…]».
     static func ffmpegOutputLine(_ s: String) -> String {
         let lines = s.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return lines.last ?? L.ffmpegFailed
+        let generic = ["Conversion failed!", "Exiting normally", "Error opening output files", "Error while filtering"]
+        let markers = ["error", "fail", "not support", "doesn't support", "unsupported", "invalid", "no such",
+                       "not implemented", "permission denied", "could not", "cannot", "unable"]
+        func clean(_ l: String) -> String {
+            l.replacingOccurrences(of: #"^(\[[^\]]*\]\s*)+"#, with: "", options: .regularExpression)
+        }
+        let meaningful = lines.filter { l in
+            !generic.contains(where: { l.hasPrefix($0) }) && markers.contains(where: { l.lowercased().contains($0) })
+        }
+        if !meaningful.isEmpty {
+            // Две первые причины — часто первая говорит «почему», вторая «что именно не вышло».
+            return meaningful.prefix(2).map(clean).joined(separator: " · ")
+        }
+        return lines.last.map(clean) ?? L.ffmpegFailed
+    }
+
+    /// AV1 встроенный ffmpeg декодирует только аппаратно (VideoToolbox, Mac на M3 и новее).
+    static func decodeArgs(_ info: MediaInfo?) -> [String] {
+        info?.videoCodec == "AV1" ? ["-hwaccel", "videotoolbox"] : []
     }
 
     // MARK: - Helpers

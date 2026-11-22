@@ -306,7 +306,7 @@ final class PlayerController {
         if e.isVideo {
             let info = try? await FFmpeg.probe(e.url)
             let audio = info?.audioStreamIndex.map { ["-map", "0:\($0)"] } ?? ["-map", "0:a:0?"]
-            let head = ["-hide_banner", "-nostdin", "-y", "-i", e.url.path, "-map", "0:V:0"] + audio + ["-sn", "-dn"]
+            let head = ["-hide_banner", "-nostdin", "-y"] + FFmpeg.decodeArgs(info) + ["-i", e.url.path, "-map", "0:V:0"] + audio + ["-sn", "-dn"]
             let tail = ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", "-f", "mp4",
                         "-progress", "pipe:1", "-nostats", out.path]
             // 1) H.264/HEVC — только переупаковка, секунды.
