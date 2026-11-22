@@ -9,9 +9,11 @@ The release DMG bundles `ffmpeg` and `ffprobe` built by [`build_ffmpeg.sh`](buil
 | x264 | r3222 | GPL-2.0-or-later | https://code.videolan.org/videolan/x264 |
 | LAME | 4.0 | LGPL-2.0-or-later | https://lame.sourceforge.io |
 | mpg123 | 1.33.7 | LGPL-2.1-or-later | https://www.mpg123.de |
+| dav1d | 1.5.5 | BSD-2-Clause | https://code.videolan.org/videolan/dav1d |
 
 The exact build configuration is in `build_ffmpeg.sh`; running it reproduces the bundled
-binaries from the sources above (x264, LAME and mpg123 static libraries come from Homebrew).
+binaries from the sources above (x264, LAME and mpg123 static libraries come from Homebrew;
+dav1d is built from its source tarball, checked against the Homebrew formula's SHA-256).
 
 iPod, iPod classic, iPod nano, iPod touch, Apple Music and iTunes are trademarks of Apple Inc.
 This project is not affiliated with or endorsed by Apple.
