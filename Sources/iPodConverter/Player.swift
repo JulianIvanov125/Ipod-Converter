@@ -136,7 +136,10 @@ final class PlayerController {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if !self.isScrubbing, t.seconds.isFinite { self.currentTime = t.seconds }
-                if let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0 { self.duration = d }
+                if let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0, d != self.duration {
+                    self.duration = d
+                    NowPlaying.update(self)   // длительность стала известна — обновляем полосу в системе
+                }
                 self.isPlaying = self.player.rate > 0
             }
         }
@@ -158,6 +161,7 @@ final class PlayerController {
             player.play()
         }
         isPlaying = player.rate > 0
+        NowPlaying.update(self)
     }
 
     func next() {
@@ -191,6 +195,7 @@ final class PlayerController {
     func seek(to seconds: Double) {
         currentTime = seconds
         player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        NowPlaying.update(self)
     }
 
     func skip(_ delta: Double) { seek(to: min(max(currentTime + delta, 0), max(duration, 0))) }
@@ -207,6 +212,7 @@ final class PlayerController {
         error = nil
         isPlaying = false
         exitFullscreen()
+        NowPlaying.update(self)
     }
 
     // MARK: Загрузка
@@ -233,6 +239,7 @@ final class PlayerController {
                 guard token == loadToken, let img else { return }
                 hiResCache[entry.id] = img
                 hiResArtwork = img
+                NowPlaying.update(self)
                 palette = CoverPalette.colors(from: img)
             }
         }
@@ -263,6 +270,7 @@ final class PlayerController {
             player.replaceCurrentItem(with: item)
             player.play()
             isPlaying = true
+            NowPlaying.update(self)
         }
     }
 

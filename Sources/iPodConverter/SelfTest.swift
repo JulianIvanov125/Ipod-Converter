@@ -1,3 +1,4 @@
+import MediaPlayer
 import AVFoundation
 import AppKit
 import Foundation
@@ -173,8 +174,14 @@ enum SelfTest {
             Task { @MainActor in
                 let pc = PlayerController.shared
                 pc.player.isMuted = true
-                pc.play([PlayEntry(id: "viz", url: f, title: "", subtitle: "", artwork: nil, isVideo: false)], startAt: 0)
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                pc.play([PlayEntry(id: "viz", url: f, title: "Test Song", subtitle: "Test Artist · Original", artwork: nil, isVideo: false)], startAt: 0)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if let i = MPNowPlayingInfoCenter.default().nowPlayingInfo {
+                    print("Now Playing: «\(i[MPMediaItemPropertyTitle] ?? "-")» — \(i[MPMediaItemPropertyArtist] ?? "-"), длительность \(i[MPMediaItemPropertyPlaybackDuration] ?? "-") c, скорость \(i[MPNowPlayingInfoPropertyPlaybackRate] ?? "-"), состояние \(MPNowPlayingInfoCenter.default().playbackState.rawValue)")
+                    pc.togglePlay()
+                    print("после паузы: скорость \(MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPNowPlayingInfoPropertyPlaybackRate] ?? "-"), состояние \(MPNowPlayingInfoCenter.default().playbackState.rawValue)")
+                    pc.togglePlay()
+                } else { print("Now Playing: пусто") }
                 // 4 секунды «кадров» по 60 Гц: какие скачки поймал детектор капель.
                 let sm = LevelSmoother()
                 let t0 = Date().timeIntervalSinceReferenceDate
