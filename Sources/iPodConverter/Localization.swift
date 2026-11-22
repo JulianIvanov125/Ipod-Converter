@@ -298,6 +298,7 @@ enum L {
           "Адзначце свой iPod зорачкай у «List iPods picks» — пасля гэтага можна дадаваць файлы. Падключаны iPod дадаецца сам.")
     }
     static var noIPodButton: String { t("Choose iPod", "Выбрать iPod", "Вибрати iPod", "Выбраць iPod") }
+    static var trackFormatMenu: String { t("Format for this track…", "Формат для этого трека…", "Формат для цього треку…", "Фармат для гэтага трэка…") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

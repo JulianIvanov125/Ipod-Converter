@@ -9,7 +9,7 @@ private enum Col {
     static let type: CGFloat = 120
     static let bitrate: CGFloat = 78
     static let size: CGFloat = 70
-    static let target: CGFloat = 118
+    static let target: CGFloat = 140
     static let rating: CGFloat = 74
     static let status: CGFloat = 112
 }
@@ -333,20 +333,27 @@ struct FormatPicker: View {
 struct TrackTargetButton<Label: View>: View {
     @Bindable var track: TrackItem
     let store: Store
+    @Binding var open: Bool
     @ViewBuilder let label: () -> Label
-    @State private var open = false
+    @State private var hover = false
 
     var body: some View {
         Button { open.toggle() } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 label()
-                Image(systemName: track.formatOverride != nil ? "gearshape.fill" : "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(track.formatOverride != nil ? Color.accentColor : Color.secondary)
+                Spacer(minLength: 0)
+                // Шестерёнка видна всегда — как у видео: здесь меняется формат именно этого трека.
+                Image(systemName: track.formatOverride != nil ? "gearshape.fill" : "gearshape")
+                    .font(.system(size: 11))
+                    .foregroundStyle(track.formatOverride != nil || hover ? Color.accentColor : Color.secondary)
             }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hover ? Theme.tint(0.06) : Color.clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hover = $0 }
         .disabled(track.isActive)
         .help(L.trackOutToggle)
         .popover(isPresented: $open, arrowEdge: .bottom) { TrackFormatView(track: track, store: store) }
@@ -363,6 +370,7 @@ struct TrackRow: View {
     let onPreview: (Bool) -> Void
     let onRate: (Int) -> Void
     @State private var confirmRemove = false
+    @State private var showFormat = false
     @State private var hoverArt = false
     @State private var hoverStar = 0
 
@@ -443,7 +451,7 @@ struct TrackRow: View {
 
                 stars.frame(width: Col.rating, alignment: .leading)
 
-                TrackTargetButton(track: track, store: store) {
+                TrackTargetButton(track: track, store: store, open: $showFormat) {
                     targetBadge(track.plan(for: model) ?? .compatible, info: info)
                 }
                     .frame(width: Col.target, alignment: .leading)
@@ -457,6 +465,15 @@ struct TrackRow: View {
         .padding(.vertical, 7)
         .glassCard(RoundedRectangle(cornerRadius: 10), solid: rowFill)
         .foregroundStyle(ink)
+        .contextMenu {
+            Button { showFormat = true } label: { Label(L.trackFormatMenu, systemImage: "gearshape") }
+                .disabled(track.info == nil || track.isActive)
+            if track.formatOverride != nil {
+                Button { track.formatOverride = nil } label: { Label(L.sameAsAll, systemImage: "arrow.uturn.backward") }
+            }
+            Divider()
+            Button(action: track.revealInFinder) { Label(track.isDone ? L.showResultInFinder : L.showOriginalInFinder, systemImage: "folder") }
+        }
         .alert(L.areYouSure, isPresented: $confirmRemove) {
             Button(L.stopAndRemove, role: .destructive, action: onRemove)
             Button(L.cancel, role: .cancel) {}
