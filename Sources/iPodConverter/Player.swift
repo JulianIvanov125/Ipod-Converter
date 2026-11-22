@@ -416,7 +416,7 @@ struct PlayerControls: View {
     var body: some View {
         VStack(spacing: 6) {
             scrubber
-            HStack(spacing: 18) {
+            HStack(spacing: fullscreen ? 18 : 12) {
                 Spacer()
                 ModeButton(icon: "shuffle", active: controller.shuffle, size: 12, dark: dark,
                            help: controller.shuffle ? L.shuffleOn : L.shuffleOff) { controller.shuffle.toggle() }
@@ -430,7 +430,7 @@ struct PlayerControls: View {
                            active: controller.repeatMode != .off, size: 12, dark: dark,
                            help: L.repeatHelp(controller.repeatMode)) { controller.cycleRepeat() }
                 Spacer()
-                VolumeControl(controller: controller, dark: dark)
+                VolumeControl(controller: controller, dark: dark, compact: !fullscreen)
                 if fullscreen {
                     button("arrow.down.right.and.arrow.up.left", L.exitFullscreen, size: 13) { controller.exitFullscreen() }
                 } else {
@@ -475,6 +475,9 @@ struct PlayerControls: View {
 struct VolumeControl: View {
     @Bindable var controller: PlayerController
     var dark = false
+    /// Узкий плеер: только значок, ползунок — во всплывающем окне.
+    var compact = false
+    @State private var showSlider = false
 
     private var icon: String {
         if controller.muted || controller.volume == 0 { return "speaker.slash.fill" }
@@ -482,6 +485,25 @@ struct VolumeControl: View {
     }
 
     var body: some View {
+        if compact {
+            Button { showSlider.toggle() } label: {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(dark ? Color.white.opacity(0.85) : Color.secondary)
+            .help(L.volume)
+            .popover(isPresented: $showSlider, arrowEdge: .top) {
+                full.padding(10)
+            }
+        } else {
+            full
+        }
+    }
+
+    private var full: some View {
         HStack(spacing: 6) {
             Button {
                 if controller.volume == 0 { controller.volume = 0.5; controller.muted = false }
@@ -497,11 +519,11 @@ struct VolumeControl: View {
             Slider(value: Binding(get: { Double(controller.muted ? 0 : controller.volume) },
                                   set: { controller.volume = Float($0); if $0 > 0 { controller.muted = false } }),
                    in: 0...1)
-                .controlSize(.mini)
-                .frame(width: 80)
+                .controlSize(compact ? .small : .mini)
+                .frame(width: compact ? 120 : 80)
                 .help(L.volume)
         }
-        .foregroundStyle(dark ? Color.white.opacity(0.85) : Color.secondary)
+        .foregroundStyle(compact ? Color.secondary : dark ? Color.white.opacity(0.85) : Color.secondary)
     }
 }
 
