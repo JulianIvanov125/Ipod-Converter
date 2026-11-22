@@ -121,6 +121,10 @@ final class LevelSmoother {
     /// Эквалайзер: быстрая атака, медленный спад.
     private(set) var levels = [Float](repeating: 0, count: n)
     private(set) var peaks = [Float](repeating: 0, count: n)
+    /// Эквалайзер: громкость полос относительно самой громкой в моменте (0…1) и их пики.
+    private(set) var eq = [Float](repeating: 0, count: n)
+    private(set) var eqPeaks = [Float](repeating: 0, count: n)
+    private var eqTop: Float = -120
     private var prevRaw = [Float](repeating: 0, count: n)
     private var cooldown = [Double](repeating: 0, count: n)
     private var prevBass: Float = 0
@@ -156,6 +160,19 @@ final class LevelSmoother {
             }
             prevRaw[i] = v
         }
+        // Относительная шкала: самая громкая полоса — у потолка, остальные ниже на свою разницу в дБ
+        // (окно 30 дБ). Потолок быстро поднимается и медленно опускается — без «качания» всей картинки.
+        let db = AudioAnalyzer.shared.snapshotDB()
+        let frameTop = db.max() ?? -120
+        eqTop = frameTop > eqTop ? eqTop + (frameTop - eqTop) * 0.6 : max(frameTop, eqTop - 0.25)
+        let window: Float = 30
+        for i in 0..<Self.n {
+            let quiet = max(0, min(1, (eqTop + 70) / 20))   // совсем тихо — столбики опускаются
+            let v = max(0, min(1, (db[i] - (eqTop - window)) / window)) * quiet
+            eq[i] = v > eq[i] ? eq[i] + (v - eq[i]) * 0.75 : eq[i] * 0.8 + v * 0.2
+            eqPeaks[i] = max(eq[i], eqPeaks[i] - 0.012)
+        }
+
         let bass = raw[0..<8].reduce(0, +) / 8
         var bassHit = false
         if bass - prevBass > 0.06, bass > 0.33, time > bassCooldown {
@@ -182,10 +199,10 @@ final class LevelSmoother {
 
         // Подписи для эквалайзера: заметные локальные максимумы.
         for i in 1..<(Self.n - 1) {
-            let v = levels[i]
-            guard v > 0.45, v >= levels[i - 1], v >= levels[i + 1] else { continue }
-            let around = (levels[max(0, i - 3)] + levels[min(Self.n - 1, i + 3)]) / 2
-            guard v - around > 0.08, !labels.keys.contains(where: { abs($0 - i) < 4 && $0 != i }) else { continue }
+            let v = eq[i]
+            guard v > 0.6, v >= eq[i - 1], v >= eq[i + 1] else { continue }
+            let around = (eq[max(0, i - 3)] + eq[min(Self.n - 1, i + 3)]) / 2
+            guard v - around > 0.1, !labels.keys.contains(where: { abs($0 - i) < 4 && $0 != i }) else { continue }
             labels[i] = (time, v)
         }
         labels = labels.filter { time - $0.value.t < 0.6 }
@@ -199,7 +216,7 @@ final class LevelSmoother {
             let attack: Float = k == 0 ? 0.35 : k == 1 ? 0.22 : 0.12
             let release: Float = k == 0 ? 0.12 : 0.05
             flowLevel[k] += (e - flowLevel[k]) * (e > flowLevel[k] ? attack : release)
-            flowPhase[k] += dt * (0.18 + Double(flowLevel[k]) * 1.6 + Double(kick) * (k == 0 ? 3.5 : k == 1 ? 1.8 : 0.8))
+            flowPhase[k] += dt * (0.27 + Double(flowLevel[k]) * 2.25 + Double(kick) * (k == 0 ? 3.5 : k == 1 ? 1.8 : 0.8))
         }
         kick += (pulse - kick) * (pulse > kick ? 0.7 : 0.14)
         return onsets
@@ -250,16 +267,19 @@ final class DropField {
         drops.removeAll { time - $0.born > Self.life }
         // Вид сверху: капля падает в случайное место всей площади. Не чаще ~3 в секунду —
         // берём только самый сильный скачок кадра, удар баса даёт каплю крупнее.
-        guard time >= next, let o = onsets.max(by: { $0.strength < $1.strength }) else { return }
-        let bass = o.band < 0
-        let strength = CGFloat(o.strength) * (bass ? 1.3 : 0.85)
-        guard strength > 0.2 else { return }
-        drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
-                          strength: min(1.25, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
-                          colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
-        next = time + (bass ? 0.15 : 0.25)
-        spawned += 1
-        if drops.count > 20 { drops.removeFirst(drops.count - 20) }
+        guard time >= next else { return }
+        // До двух капель за раз (бас и самый сильный звук сверху) — в разных местах экрана.
+        for o in onsets.sorted(by: { $0.strength > $1.strength }).prefix(2) {
+            let bass = o.band < 0
+            let strength = CGFloat(o.strength) * (bass ? 1.3 : 0.85)
+            guard strength > 0.2 else { continue }
+            drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
+                              strength: min(1.25, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
+                              colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
+            next = time + (bass ? 0.15 : 0.2)
+            spawned += 1
+        }
+        if drops.count > 26 { drops.removeFirst(drops.count - 26) }
     }
 }
 
@@ -312,16 +332,56 @@ struct AudioVisualizer: View {
 
     private func drawBars(_ ctx: GraphicsContext, _ size: CGSize) {
         let g = barGeometry(size)
-        let gradient = Gradient(colors: [accents[0], accents[1], accents[2]])
-        for i in 0..<LevelSmoother.n {
-            let x = CGFloat(i) * (g.w + g.gap)
-            // Контраст: тихое ниже, громкое выше; низы подпрыгивают на ударе баса.
+        let n = LevelSmoother.n
+        // Столбик уже шага, со скруглением-капсулой; цвет идёт снизу вверх по цветам обложки.
+        let bw = max(2, g.w * 0.62)
+        let inset = (g.w - bw) / 2
+        let gradient = Gradient(stops: [.init(color: accents[0].opacity(0.85), location: 0),
+                                        .init(color: accents[1], location: 0.55),
+                                        .init(color: accents[2], location: 1)])
+        var heights = [CGFloat](repeating: 0, count: n)
+        for i in 0..<n {
             let boost = i < 12 ? CGFloat(smoother.kick) * 0.4 * (1 - CGFloat(i) / 12) : 0
-            let h = max(3, min(1, pow(CGFloat(smoother.levels[i]), 1.5) * 1.4 + boost) * g.maxH)
-            ctx.fill(Path(roundedRect: CGRect(x: x, y: g.baseY - h, width: g.w, height: h), cornerRadius: min(g.w / 2, 4)),
-                     with: .linearGradient(gradient, startPoint: CGPoint(x: x, y: g.baseY), endPoint: CGPoint(x: x, y: g.baseY - g.maxH)))
-            let py = g.baseY - min(1, pow(CGFloat(smoother.peaks[i]), 1.5) * 1.4) * g.maxH - 5
-            ctx.fill(Path(roundedRect: CGRect(x: x, y: py, width: g.w, height: 3), cornerRadius: 1.5), with: .color(.white.opacity(0.85)))
+            heights[i] = max(bw, min(1, pow(CGFloat(smoother.eq[i]), 1.3) + boost) * g.maxH)
+        }
+        func rect(_ i: Int) -> CGRect {
+            CGRect(x: CGFloat(i) * (g.w + g.gap) + inset, y: g.baseY - heights[i], width: bw, height: heights[i])
+        }
+        let fill = GraphicsContext.Shading.linearGradient(gradient, startPoint: CGPoint(x: 0, y: g.baseY),
+                                                          endPoint: CGPoint(x: 0, y: g.baseY - g.maxH))
+        // Мягкое свечение под столбиками.
+        var glow = ctx
+        glow.addFilter(.blur(radius: 14))
+        glow.opacity = 0.55
+        for i in 0..<n { glow.fill(Path(roundedRect: rect(i), cornerRadius: bw / 2), with: fill) }
+        // Сами столбики и блик по левому краю — «стекло».
+        for i in 0..<n {
+            let r = rect(i)
+            ctx.fill(Path(roundedRect: r, cornerRadius: bw / 2), with: fill)
+            ctx.fill(Path(roundedRect: CGRect(x: r.minX + bw * 0.18, y: r.minY + bw * 0.4, width: bw * 0.22,
+                                              height: max(0, r.height - bw * 0.8)), cornerRadius: bw * 0.11),
+                     with: .color(.white.opacity(0.18)))
+        }
+        // Огибающая по верхушкам — плавная линия.
+        var curve = Path()
+        for i in 0..<n {
+            let p = CGPoint(x: CGFloat(i) * (g.w + g.gap) + g.w / 2, y: g.baseY - heights[i] - 4)
+            if i == 0 { curve.move(to: p) } else {
+                let prev = CGPoint(x: CGFloat(i - 1) * (g.w + g.gap) + g.w / 2, y: g.baseY - heights[i - 1] - 4)
+                let mid = CGPoint(x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2)
+                curve.addQuadCurve(to: mid, control: prev)
+                if i == n - 1 { curve.addLine(to: p) }
+            }
+        }
+        glow.stroke(curve, with: .color(.white.opacity(0.5)), lineWidth: 4)
+        ctx.stroke(curve, with: .color(.white.opacity(0.35)), lineWidth: 1)
+        // Пики — светящиеся точки, медленно опускаются.
+        for i in 0..<n {
+            let py = g.baseY - pow(CGFloat(smoother.eqPeaks[i]), 1.3) * g.maxH - 9
+            let c = CGPoint(x: CGFloat(i) * (g.w + g.gap) + g.w / 2, y: py)
+            let d = min(bw, 6)
+            glow.fill(Circle().path(in: CGRect(x: c.x - d, y: c.y - d, width: d * 2, height: d * 2)), with: .color(accents[2]))
+            ctx.fill(Circle().path(in: CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d)), with: .color(.white.opacity(0.9)))
         }
     }
 
@@ -343,7 +403,7 @@ struct AudioVisualizer: View {
         let g = barGeometry(size)
         for (band, entry) in smoother.labels {
             let alpha = max(0, 1 - (t - entry.t) / 0.6)
-            let y = g.baseY - min(1, pow(CGFloat(smoother.peaks[band]), 1.5) * 1.4) * g.maxH - 24
+            let y = g.baseY - pow(CGFloat(smoother.eqPeaks[band]), 1.3) * g.maxH - 24
             pill(ctx, LevelSmoother.label(LevelSmoother.hz(band)), at: CGPoint(x: barCenterX(Double(band), size), y: max(14, y)),
                  size: size, alpha: alpha)
         }

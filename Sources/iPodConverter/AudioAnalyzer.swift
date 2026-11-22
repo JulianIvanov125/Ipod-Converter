@@ -23,6 +23,8 @@ final class AudioAnalyzer: @unchecked Sendable {
 
     private var lock = os_unfair_lock()
     private var bands = [Float](repeating: 0, count: AudioAnalyzer.bandCount)
+    /// Те же полосы в дБ без обрезки сверху — для эквалайзера, где важно, какая частота громче.
+    private var bandsDB = [Float](repeating: -120, count: AudioAnalyzer.bandCount)
     private var lastUpdate: CFTimeInterval = 0
 
     private init() {
@@ -43,6 +45,15 @@ final class AudioAnalyzer: @unchecked Sendable {
         let age = CACurrentMediaTime() - lastUpdate
         os_unfair_lock_unlock(&lock)
         return age > 0.25 ? b.map { $0 * Float(max(0, 1 - (age - 0.25) * 3)) } : b
+    }
+
+    /// Полосы в дБ (с подъёмом верхов); на паузе уходят в тишину.
+    func snapshotDB() -> [Float] {
+        os_unfair_lock_lock(&lock)
+        let b = bandsDB
+        let age = CACurrentMediaTime() - lastUpdate
+        os_unfair_lock_unlock(&lock)
+        return age > 0.25 ? b.map { $0 - Float(max(0, age - 0.25) * 120) } : b
     }
 
     // MARK: Подключение к плееру
@@ -126,6 +137,7 @@ final class AudioAnalyzer: @unchecked Sendable {
         let count = Self.bandCount
         let binHz = sampleRate / Double(fftSize)
         var out = [Float](repeating: 0, count: count)
+        var outDB = [Float](repeating: -120, count: count)
         let lo = 40.0, hi = min(16000.0, sampleRate / 2 - binHz)
         for b in 0..<count {
             let f0 = lo * pow(hi / lo, Double(b) / Double(count))
@@ -139,10 +151,12 @@ final class AudioAnalyzer: @unchecked Sendable {
             // Небольшой подъём верхов: в музыке они тише, иначе правая часть всегда пустая.
             let tilt = Float(b) / Float(count) * 12
             out[b] = min(max((db + tilt + 72) / 58, 0), 1)
+            outDB[b] = db + tilt
         }
 
         os_unfair_lock_lock(&lock)
         bands = out
+        bandsDB = outDB
         lastUpdate = CACurrentMediaTime()
         os_unfair_lock_unlock(&lock)
     }

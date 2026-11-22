@@ -188,12 +188,14 @@ enum SelfTest {
                 let t0 = Date().timeIntervalSinceReferenceDate
                 var log: [String] = []
                 let field = DropField()
-                var flowMin: Float = 1, flowMax: Float = 0, kickMax: Float = 0
+                var flowMin: Float = 1, flowMax: Float = 0, kickMax: Float = 0, eqBass: Float = 0, eq2k: Float = 0, eqTop: Float = 0
                 for _ in 0..<240 {
                     let t = Date().timeIntervalSinceReferenceDate
                     let os = sm.update(time: t)
                     field.spawn(os, time: t)
                     flowMin = min(flowMin, sm.flowLevel[0]); flowMax = max(flowMax, sm.flowLevel[0]); kickMax = max(kickMax, sm.kick)
+                    let b60 = Int(LevelSmoother.band(for: 60)), b2k = Int(LevelSmoother.band(for: 2000))
+                    eqBass = max(eqBass, sm.eq[b60]); eq2k = max(eq2k, sm.eq[b2k]); eqTop = max(eqTop, sm.eq[LevelSmoother.n - 3])
                     for o in os {
                         log.append(String(format: "%.2fс ", t - t0) + (o.band < 0 ? "БАС" : LevelSmoother.label(LevelSmoother.hz(o.band))))
                     }
@@ -201,6 +203,7 @@ enum SelfTest {
                 }
                 print("капли (\(log.count)): " + log.joined(separator: " | "))
                 print("видимых капель за 4 с: \(field.spawned); бас-пятно цвета: \(String(format: "%.2f…%.2f", flowMin, flowMax)), фаза \(String(format: "%.2f", sm.flowPhase[0])), удар до \(String(format: "%.2f", kickMax))")
+                print(String(format: "эквалайзер (макс.): 60 Гц %.2f, 2 кГц %.2f, верх %.2f", eqBass, eq2k, eqTop))
                 let b = AudioAnalyzer.shared.snapshot()
                 let top = b.enumerated().sorted { $0.element > $1.element }.prefix(3)
                 func hz(_ i: Int) -> Int { Int(40 * pow(16000.0 / 40, (Double(i) + 0.5) / Double(AudioAnalyzer.bandCount))) }
