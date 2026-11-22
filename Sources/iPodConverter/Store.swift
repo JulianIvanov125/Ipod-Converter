@@ -441,7 +441,8 @@ final class Store {
         let saved = (UserDefaults.standard.stringArray(forKey: "favorites") ?? []).compactMap(IPodModel.init(rawValue:))
         // Первый запуск — вкладки по умолчанию; если пользователь закрыл все — оставляем пусто.
         let firstLaunch = UserDefaults.standard.object(forKey: "favorites") == nil
-        favorites = Set(firstLaunch ? IPodModel.defaultFavorites : saved)
+        // Первый запуск — без вкладок: «Выберите iPod» (подключённый iPod добавится сам, если доступ разрешён).
+        favorites = Set(firstLaunch ? [] : saved)
         let detector = IPodDetector.shared
         detector.onConnect = { [weak self] m in self?.iPodConnected(m) }
         detector.preferEnhanced5G = { [weak self] in

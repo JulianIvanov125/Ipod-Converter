@@ -25,6 +25,11 @@ final class IPodDetector {
     static let shared = IPodDetector()
 
     private(set) var devices: [ConnectedIPod] = []
+    /// iPod подключён, но доступ к его диску запрещён (запрос macOS про съёмные носители).
+    /// Тогда данные iPod не используем: вкладки сами не добавляются — пользователь выбирает iPod вручную.
+    private(set) var accessDenied = false
+    /// По USB подключено устройство «iPod», но модель не распознана (nano 6 без видео, неизвестная модель).
+    private(set) var unknownIPod = false
     /// Подключённые модели (без повторов, в порядке каталога).
     var connected: [IPodModel] { IPodModel.allCases.filter { m in devices.contains { $0.model == m } } }
 
@@ -49,7 +54,11 @@ final class IPodDetector {
     func device(for m: IPodModel) -> ConnectedIPod? { devices.first { $0.model == m } }
 
     func refresh() {
-        let found = Self.detect(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides())
+        let denied = Self.volumeAccessDenied()
+        if denied != accessDenied { accessDenied = denied }
+        let unknown = Self.hasUnrecognizedIPod()
+        if unknown != unknownIPod { unknownIPod = unknown }
+        let found = denied ? [] : Self.detect(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides())
         guard found != devices else { return }
         let old = Set(connected)
         devices = found
@@ -103,12 +112,12 @@ final class IPodDetector {
 
     /// USB-устройства Apple: idProduct и серийный номер (у iPod это FireWire GUID).
     /// Фильтр по idVendor в самом запросе IOKit не срабатывает — проверяем производителя здесь.
-    nonisolated static func usbDevices() -> [(pid: Int, serial: String)] {
+    nonisolated static func usbDevices() -> [(pid: Int, serial: String, name: String)] {
         guard let matching = IOServiceMatching("IOUSBHostDevice") else { return [] }
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return [] }
         defer { IOObjectRelease(iterator) }
-        var out: [(Int, String)] = []
+        var out: [(Int, String, String)] = []
         while true {
             let s = IOIteratorNext(iterator)
             if s == 0 { break }
@@ -116,7 +125,7 @@ final class IPodDetector {
             func prop(_ key: String) -> Any? { IORegistryEntryCreateCFProperty(s, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() }
             guard (prop("idVendor") as? Int) == 0x05AC, let pid = prop("idProduct") as? Int else { continue }
             let serial = (prop("USB Serial Number") as? String) ?? (prop("kUSBSerialNumberString") as? String) ?? ""
-            out.append((pid, serial.uppercased()))
+            out.append((pid, serial.uppercased(), (prop("USB Product Name") as? String) ?? ""))
         }
         return out
     }
@@ -129,6 +138,28 @@ final class IPodDetector {
     }
 
     /// iPod, смонтированные как диски: GUID и номер модели из SysInfo / SysInfoExtended, имя из iTunesDB.
+    /// Устройство с USB-именем «iPod», которое не сопоставилось ни с одной моделью с видео.
+    nonisolated static func hasUnrecognizedIPod() -> Bool {
+        usbDevices().contains { $0.name.localizedCaseInsensitiveContains("iPod") && model(forUSB: $0.pid, modelNumbers: []) == nil }
+    }
+
+    /// Подключён iPod (по USB), а прочитать съёмный диск не дают — значит, пользователь запретил доступ.
+    nonisolated static func volumeAccessDenied() -> Bool {
+        guard usbDevices().contains(where: { model(forUSB: $0.pid, modelNumbers: []) != nil }) else { return false }
+        let keys: [URLResourceKey] = [.volumeIsRemovableKey, .volumeIsEjectableKey, .volumeIsInternalKey]
+        let vols = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+        for v in vols {
+            guard let r = try? v.resourceValues(forKeys: Set(keys)),
+                  r.volumeIsInternal != true, (r.volumeIsRemovable == true || r.volumeIsEjectable == true) else { continue }
+            do { _ = try FileManager.default.contentsOfDirectory(atPath: v.path) }
+            catch let e as NSError {
+                let posix = (e.userInfo[NSUnderlyingErrorKey] as? NSError)?.code
+                if e.code == NSFileReadNoPermissionError || posix == Int(EPERM) || posix == Int(EACCES) { return true }
+            }
+        }
+        return false
+    }
+
     nonisolated static func mountedIPods() -> [MountedIPod] {
         let vols = (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? []
         return vols.compactMap { v in

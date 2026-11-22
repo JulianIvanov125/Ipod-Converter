@@ -299,6 +299,20 @@ enum L {
     }
     static var noIPodButton: String { t("Choose iPod", "Выбрать iPod", "Вибрати iPod", "Выбраць iPod") }
     static var trackFormatMenu: String { t("Format for this track…", "Формат для этого трека…", "Формат для цього треку…", "Фармат для гэтага трэка…") }
+    static var accessDeniedTitle: String { t("No access to the iPod", "Нет доступа к iPod", "Немає доступу до iPod", "Няма доступу да iPod") }
+    static var accessDeniedText: String {
+        t("You didn't allow access to removable volumes, so the app can't tell which iPod is connected. Choose it here manually — or allow access in System Settings → Privacy & Security → Files & Folders.",
+          "Доступ к съёмным носителям не разрешён, поэтому приложение не знает, какой iPod подключён. Выберите его здесь вручную — или разрешите доступ: Системные настройки → Конфиденциальность и безопасность → Файлы и папки.",
+          "Доступ до знімних носіїв не дозволено, тому застосунок не знає, який iPod підключено. Виберіть його тут вручну — або дозвольте доступ: Системні параметри → Приватність і безпека → Файли й папки.",
+          "Доступ да здымных носьбітаў не дазволены, таму праграма не ведае, які iPod падключаны. Выберыце яго тут уручную — або дазвольце доступ: Сістэмныя налады → Прыватнасць і бяспека → Файлы і папкі.")
+    }
+    static var openPrivacySettings: String { t("Open settings", "Открыть настройки", "Відкрити налаштування", "Адкрыць налады") }
+    static var unknownIPodHint: String {
+        t("An iPod is connected, but its model wasn't recognized — choose it manually.",
+          "iPod подключён, но модель не определена — выберите её вручную.",
+          "iPod підключено, але модель не визначено — виберіть її вручну.",
+          "iPod падключаны, але мадэль не вызначана — выберыце яе ўручную.")
+    }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

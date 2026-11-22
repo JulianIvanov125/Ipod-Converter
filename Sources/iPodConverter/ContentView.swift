@@ -397,6 +397,13 @@ struct CatalogView: View {
                 Text(L.starredAppear)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                if IPodDetector.shared.accessDenied {
+                    AccessDeniedHint()
+                } else if IPodDetector.shared.unknownIPod {
+                    Label(L.unknownIPodHint, systemImage: "questionmark.circle")
+                        .font(.system(size: 11)).foregroundStyle(.orange).padding(.top, 4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -452,6 +459,26 @@ struct CatalogView: View {
     }
 }
 
+// MARK: - Доступ к диску iPod запрещён
+
+struct AccessDeniedHint: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(L.accessDeniedTitle, systemImage: "lock.fill")
+                .font(.system(size: 11, weight: .semibold)).foregroundStyle(.orange)
+            Text(L.accessDeniedText).font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(L.openPrivacySettings) {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(.link).font(.system(size: 11))
+        }
+        .padding(.top, 4)
+    }
+}
+
 // MARK: - Не выбран ни один iPod
 
 struct NoIPodPlaceholder: View {
@@ -467,6 +494,12 @@ struct NoIPodPlaceholder: View {
                 Text(L.noIPodTitle).font(.system(size: 22, weight: .semibold))
                 Text(L.noIPodSubtitle).font(.system(size: 13)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center).frame(maxWidth: 420)
+                if IPodDetector.shared.accessDenied {
+                    AccessDeniedHint().frame(maxWidth: 420)
+                } else if IPodDetector.shared.unknownIPod {
+                    Label(L.unknownIPodHint, systemImage: "questionmark.circle")
+                        .font(.system(size: 12)).foregroundStyle(.orange).frame(maxWidth: 420)
+                }
             }
             Button(action: onPick) {
                 Label(L.noIPodButton, systemImage: "star")

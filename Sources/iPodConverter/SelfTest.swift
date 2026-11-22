@@ -42,6 +42,7 @@ enum SelfTest {
             return true
         }
         if args.contains("--selftest-ipods") {
+            print("доступ к дискам iPod запрещён: \(IPodDetector.volumeAccessDenied()), нераспознанный iPod: \(IPodDetector.hasUnrecognizedIPod())")
             for d in IPodDetector.detect(overrides: IPodDetector.savedOverrides()) {
                 print("подключён: «\(d.name ?? "-")» → конвертация под \(d.model.title)\(d.ambiguous ? " (5G/5.5G не различить автоматически)" : ""), GUID …\(d.serial.suffix(4))")
             }
