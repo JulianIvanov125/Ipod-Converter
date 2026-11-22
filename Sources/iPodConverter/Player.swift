@@ -773,11 +773,12 @@ struct FullPlayerView: View {
         GeometryReader { geo in
             ZStack {
                 if viz.style == .bars {
-                    // Эквалайзер — нижняя половина экрана
+                    // Эквалайзер — только нижняя полоса экрана, ниже обложки и текста
                     VStack {
                         Spacer()
                         AudioVisualizer(style: viz.style, colors: controller.palette)
-                            .frame(height: geo.size.height * 0.5)
+                            .frame(height: min(geo.size.height * 0.26, 300))
+                            .opacity(LyricsStore.shared.visible ? 0.6 : 0.9)
                     }
                 } else {
                     // Капли и цвета обложки — на весь экран, за обложкой
@@ -800,7 +801,8 @@ struct FullPlayerView: View {
                             .frame(maxWidth: geo.size.width * 0.5, maxHeight: geo.size.height * 0.72)
                     }
                     .padding(.horizontal, geo.size.width * 0.06)
-                    .padding(.bottom, 140)   // место под кнопки
+                    // место под кнопки, а при эквалайзере — под его полосу
+                    .padding(.bottom, viz.style == .bars ? max(140, min(geo.size.height * 0.26, 300)) : 140)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 // Обложка — сверху по центру

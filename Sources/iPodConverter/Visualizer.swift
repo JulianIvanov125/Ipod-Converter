@@ -127,6 +127,11 @@ final class LevelSmoother {
     private var bassCooldown: Double = 0
     /// Толчок на удар баса, 0…1, гаснет за ~0.4 с.
     private(set) var pulse: Float = 0
+    /// Цвета обложки: части спектра, медленная громкость каждой и накопленная «фаза течения».
+    static let flowGroups: [Range<Int>] = [0..<6, 6..<14, 14..<24, 24..<36, 36..<n]
+    private(set) var flowLevel = [Float](repeating: 0, count: 5)
+    private(set) var flowPhase = [Double](repeating: 0, count: 5)
+    private var lastTime: Double = 0
     /// Подписи частот на скачках (эквалайзер): полоса → (время, уровень).
     private(set) var labels: [Int: (t: Double, v: Float)] = [:]
 
@@ -136,7 +141,8 @@ final class LevelSmoother {
         var onsets: [(Int, Float)] = []
         for i in 0..<Self.n {
             let v = raw[i]
-            levels[i] = v > levels[i] ? levels[i] + (v - levels[i]) * 0.6 : levels[i] * 0.88 + v * 0.12
+            // Плавно: мягкая атака, медленный спад — столбики не дёргаются.
+            levels[i] = v > levels[i] ? levels[i] + (v - levels[i]) * 0.32 : levels[i] * 0.93 + v * 0.07
             peaks[i] = max(levels[i], peaks[i] - 0.012)
             // Скачок: резкий рост в полосе, громче порога, не чаще раза в 0.3 с на полосу.
             let rise = v - prevRaw[i]
@@ -181,6 +187,15 @@ final class LevelSmoother {
             labels[i] = (time, v)
         }
         labels = labels.filter { time - $0.value.t < 0.6 }
+
+        // Течение цвета: громкость сглажена на ~1 с (без мерцания), а в ритм ускоряется движение.
+        let dt = lastTime == 0 ? 0 : min(0.1, max(0, time - lastTime))
+        lastTime = time
+        for k in 0..<Self.flowGroups.count {
+            let e = energy(Self.flowGroups[k])
+            flowLevel[k] += (e - flowLevel[k]) * (e > flowLevel[k] ? 0.05 : 0.025)
+            flowPhase[k] += dt * (0.18 + Double(flowLevel[k]) * 1.4 + Double(pulse) * (k == 0 ? 0.9 : 0.4))
+        }
         return onsets
     }
 
@@ -220,24 +235,25 @@ private struct Drop {
 
 final class DropField {
     fileprivate private(set) var drops: [Drop] = []
-    static let life = 2.4
+    static let life = 4.5
+    private var next: Double = 0
+    /// Сколько капель появилось всего (для самотеста).
+    private(set) var spawned = 0
 
     func spawn(_ onsets: [(band: Int, strength: Float)], time: Double) {
-        for o in onsets {
-            if o.band < 0 {
-                // Удар баса — большая капля около центра.
-                drops.append(Drop(x: 0.5 + .random(in: -0.08...0.08), y: 0.55 + .random(in: -0.05...0.05), born: time,
-                                  strength: CGFloat(o.strength) * 1.4, hz: nil, colorIndex: 0))
-            } else {
-                // Чем выше частота — тем правее; высота — случайная по «поверхности».
-                let u = CGFloat(o.band) / CGFloat(LevelSmoother.n - 1)
-                drops.append(Drop(x: 0.08 + u * 0.84, y: .random(in: 0.35...0.8), born: time,
-                                  strength: CGFloat(o.strength), hz: LevelSmoother.hz(o.band),
-                                  colorIndex: o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
-            }
-        }
         drops.removeAll { time - $0.born > Self.life }
-        if drops.count > 60 { drops.removeFirst(drops.count - 60) }
+        // Вид сверху: капля падает в случайное место всей площади. Не чаще ~3 в секунду —
+        // берём только самый сильный скачок кадра, удар баса даёт каплю крупнее.
+        guard time >= next, let o = onsets.max(by: { $0.strength < $1.strength }) else { return }
+        let bass = o.band < 0
+        let strength = CGFloat(o.strength) * (bass ? 1.0 : 0.75)
+        guard strength > 0.3 else { return }
+        drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
+                          strength: min(1, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
+                          colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
+        next = time + (bass ? 0.3 : 0.38)
+        spawned += 1
+        if drops.count > 14 { drops.removeFirst(drops.count - 14) }
     }
 }
 
@@ -278,8 +294,9 @@ struct AudioVisualizer: View {
     private func barGeometry(_ size: CGSize) -> (w: CGFloat, gap: CGFloat, baseY: CGFloat, maxH: CGFloat) {
         let gap: CGFloat = 4
         let w = (size.width - gap * CGFloat(LevelSmoother.n - 1)) / CGFloat(LevelSmoother.n)
-        let baseY = size.height * 0.78
-        return (w, gap, baseY, baseY - 8)
+        // Шкала частот внизу, над столбиками — запас под подписи; кадр сам занимает только низ экрана.
+        let baseY = size.height - 30
+        return (w, gap, baseY, max(20, baseY - 30))
     }
 
     private func barCenterX(_ band: Double, _ size: CGSize) -> CGFloat {
@@ -297,9 +314,6 @@ struct AudioVisualizer: View {
                      with: .linearGradient(gradient, startPoint: CGPoint(x: x, y: g.baseY), endPoint: CGPoint(x: x, y: g.baseY - g.maxH)))
             let py = g.baseY - CGFloat(smoother.peaks[i]) * g.maxH - 5
             ctx.fill(Path(roundedRect: CGRect(x: x, y: py, width: g.w, height: 3), cornerRadius: 1.5), with: .color(.white.opacity(0.85)))
-            ctx.fill(Path(roundedRect: CGRect(x: x, y: g.baseY + 4, width: g.w, height: h * 0.25), cornerRadius: min(g.w / 2, 4)),
-                     with: .linearGradient(Gradient(colors: [accents[0].opacity(0.3), .clear]),
-                                           startPoint: CGPoint(x: x, y: g.baseY), endPoint: CGPoint(x: x, y: g.baseY + h * 0.25)))
         }
     }
 
@@ -330,45 +344,29 @@ struct AudioVisualizer: View {
     // MARK: Капли на воде
 
     private func drawDrops(_ ctx: GraphicsContext, _ size: CGSize, t: Double, colors: [Color]) {
-        // Спокойная «поверхность»: едва заметные горизонтальные блики.
-        for k in 0..<5 {
-            let y = size.height * (0.4 + CGFloat(k) * 0.12)
-            let a = 0.05 + 0.03 * sin(t * 0.7 + Double(k))
-            ctx.stroke(Path { p in p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: size.width, y: y)) },
-                       with: .linearGradient(Gradient(colors: [.clear, .white.opacity(a), .clear]),
-                                             startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0)),
-                       lineWidth: 1)
-        }
-
-        let maxR = min(size.width, size.height) * 0.45
+        // Вид на воду сверху: круги расходятся широко, почти через весь экран, и медленно тают.
+        let reach = hypot(size.width, size.height) * 0.45
+        var glow = ctx
+        glow.addFilter(.blur(radius: 6))
         for d in field.drops {
             let age = t - d.born
             let life = age / DropField.life
             guard life < 1 else { continue }
             let c = colors[d.colorIndex % colors.count]
             let center = CGPoint(x: d.x * size.width, y: d.y * size.height)
-            let fade = pow(1 - life, 1.6)
-
-            // Три расходящихся кольца с задержкой; эллипс — вид на воду под углом.
+            // Плавное проявление за 0.25 с и мягкое затухание — без вспышек и мерцания.
+            let appear = min(1, age / 0.25)
+            let fade = pow(1 - life, 2)
             for ring in 0..<3 {
-                let ra = age - Double(ring) * 0.16
+                let ra = age - Double(ring) * 0.35
                 guard ra > 0 else { continue }
-                let r = CGFloat(1 - exp(-ra * 1.6)) * maxR * (0.45 + d.strength * 0.6)
-                let rect = CGRect(x: center.x - r, y: center.y - r * 0.38, width: r * 2, height: r * 0.76)
-                let alpha = Double(fade) * Double(d.strength) * (1 - Double(ring) * 0.28)
-                let width = max(0.6, (3.2 - CGFloat(ring)) * CGFloat(1 - life))
-                var glow = ctx
-                glow.addFilter(.blur(radius: 5))
-                glow.stroke(Ellipse().path(in: rect), with: .color(c.opacity(alpha * 0.7)), lineWidth: width + 3)
-                ctx.stroke(Ellipse().path(in: rect), with: .color(c.opacity(alpha)), lineWidth: width)
-            }
-            // Сам «всплеск» в первые доли секунды.
-            if age < 0.25 {
-                let s = CGFloat(1 - age / 0.25)
-                let r = 6 + d.strength * 10 * s
-                ctx.fill(Ellipse().path(in: CGRect(x: center.x - r, y: center.y - r * 0.5, width: r * 2, height: r)),
-                         with: .radialGradient(Gradient(colors: [.white.opacity(Double(s)), c.opacity(0)]),
-                                               center: center, startRadius: 0, endRadius: r))
+                // Замедление, как у настоящей волны: быстро вначале, потом еле ползёт.
+                let r = CGFloat(1 - exp(-ra * 0.75)) * reach * (0.45 + d.strength * 0.55) + 2
+                let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+                let alpha = 0.38 * Double(d.strength) * appear * fade * (1 - Double(ring) * 0.3)
+                let width = 1.5 - CGFloat(ring) * 0.3
+                glow.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha * 0.6)), lineWidth: width + 4)
+                ctx.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha)), lineWidth: width)
             }
         }
     }
@@ -382,26 +380,37 @@ struct AudioVisualizer: View {
         ctx.fill(Path(full), with: .color(blend[0].opacity(0.55)))
         ctx.fill(Path(full), with: .color(.black.opacity(0.35)))
 
-        // Пятна цветов: каждое плавает по своей траектории, размер — от громкости своей части спектра.
-        let groups: [Range<Int>] = [0..<6, 6..<14, 14..<24, 24..<36, 36..<LevelSmoother.n]
+        // Пятна цветов: у каждого своя неровная форма, своя траектория и вращение.
+        // Громкость своей части спектра (сглаженная) плавно раздувает пятно, ритм ускоряет течение.
         let minSide = min(size.width, size.height)
-        let pulse = CGFloat(smoother.pulse)
         var layer = ctx
-        layer.addFilter(.blur(radius: minSide * 0.1))
+        layer.addFilter(.blur(radius: minSide * 0.09))
         for k in 0..<min(blend.count, 5) {
             let kk = Double(k)
-            let e = CGFloat(smoother.energy(groups[k]))
-            let cx = size.width * (0.5 + 0.38 * CGFloat(sin(t * (0.07 + kk * 0.023) + kk * 1.7)))
-            let cy = size.height * (0.5 + 0.34 * CGFloat(cos(t * (0.06 + kk * 0.019) + kk * 2.3)))
-            let r = minSide * (0.32 + e * 0.38 + (k == 0 ? pulse * 0.18 : 0))
-            let rect = CGRect(x: cx - r * 1.25, y: cy - r, width: r * 2.5, height: r * 2)
-            layer.fill(Ellipse().path(in: rect),
-                       with: .radialGradient(Gradient(colors: [blend[k].opacity(0.95), blend[k].opacity(0)]),
-                                             center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r * 1.25))
-        }
-        // На удар баса — лёгкая вспышка всего фона.
-        if pulse > 0.02 {
-            ctx.fill(Path(full), with: .color(.white.opacity(Double(pulse) * 0.08)))
+            let ph = smoother.flowPhase[k]
+            let e = CGFloat(smoother.flowLevel[k])
+            // Разные траектории: петли Лиссажу с разными частотами по осям.
+            let fx = [1.0, 0.7, 1.3, 0.55, 0.9][k], fy = [0.8, 1.2, 0.6, 1.05, 1.4][k]
+            let cx = size.width * (0.5 + 0.36 * CGFloat(sin(ph * fx * 0.35 + kk * 1.7)))
+            let cy = size.height * (0.5 + 0.32 * CGFloat(cos(ph * fy * 0.3 + kk * 2.3)))
+            let r = minSide * (0.3 + e * 0.32)
+            let stretch = 1.15 + 0.35 * CGFloat(sin(ph * 0.21 + kk))
+            let angle = ph * (k.isMultiple(of: 2) ? 0.12 : -0.09) + kk
+            var blob = Path()
+            let steps = 56
+            for i in 0...steps {
+                let a = Double(i) / Double(steps) * 2 * .pi
+                // Края «текут»: несколько медленных гармоник с разными фазами.
+                let wobble = 1 + 0.16 * sin(3 * a + ph * 0.8 + kk) + 0.09 * sin(5 * a - ph * 0.6 + kk * 2)
+                    + 0.05 * sin(2 * a + ph * 1.1)
+                let lx = CGFloat(cos(a) * wobble) * r * stretch, ly = CGFloat(sin(a) * wobble) * r
+                let p = CGPoint(x: cx + lx * CGFloat(cos(angle)) - ly * CGFloat(sin(angle)),
+                                y: cy + lx * CGFloat(sin(angle)) + ly * CGFloat(cos(angle)))
+                if i == 0 { blob.move(to: p) } else { blob.addLine(to: p) }
+            }
+            blob.closeSubpath()
+            layer.fill(blob, with: .radialGradient(Gradient(colors: [blend[k].opacity(0.9), blend[k].opacity(0.35), blend[k].opacity(0)]),
+                                                   center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r * stretch * 1.15))
         }
         // Затемнение к краям — обложка и кнопки читаются на любом фоне.
         ctx.fill(Path(full), with: .radialGradient(Gradient(colors: [.clear, .black.opacity(0.55)]),
