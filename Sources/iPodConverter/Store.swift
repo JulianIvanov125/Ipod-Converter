@@ -168,7 +168,7 @@ final class VideoItem: Identifiable {
                     if let meta, inTV {
                         try await MusicLibrary.addToTV(output, playlist: model.playlistName, meta: meta)
                     } else {
-                        try await MusicLibrary.add(output, playlist: model.playlistName)
+                        try await MusicLibrary.add(output, playlist: model.playlistName, name: meta?.title ?? "", artist: meta?.artist ?? "")
                     }
                     musicStatus = (inTV ? L.inTV(model.playlistName) : L.inMusic(model.playlistName), true)
                     Notifier.notify(
@@ -620,9 +620,14 @@ final class Store {
         musicBatchStatus = (L.addingToMusic, true)
         Task {
             do {
-                let pids = try await MusicLibrary.add(
-                    b.outputs.map { ($0.0, $0.1.rating > 0 ? $0.1.rating : nil) },
-                    playlist: b.model.playlistName, asMusicVideo: false)
+                let items = b.outputs.map { out, t -> MusicLibrary.Item in
+                    // WAV/AIFF не хранят обложку внутри — ставим её треку в медиатеке.
+                    let noEmbeddedArt = ["wav", "aif", "aiff", "aifc"].contains(out.pathExtension.lowercased())
+                    return MusicLibrary.Item(file: out, rating: t.rating > 0 ? t.rating : nil,
+                                             name: t.info?.title ?? "", artist: t.info?.artist ?? "", album: t.info?.album ?? "",
+                                             cover: noEmbeddedArt ? t.fetched?.coverFile : nil)
+                }
+                let pids = try await MusicLibrary.add(items, playlist: b.model.playlistName, asMusicVideo: false)
                 for (pid, entry) in zip(pids, b.outputs) where !pid.isEmpty { entry.1.musicPersistentID = pid }
                 musicBatchStatus = (summary + " · " + L.inMusic(b.model.playlistName), b.failed == 0)
                 Notifier.notify(title: L.musicReady(b.model.title),
