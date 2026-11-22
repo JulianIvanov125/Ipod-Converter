@@ -298,15 +298,18 @@ final class Store {
         if let o = item.outputOverride { return o.apply(to: base) }
         return VideoOutputSettings.shared.apply(to: base)
     }
-    /// Избранные модели — из них строятся вкладки.
+    /// iPod, отмеченные звёздочкой вручную — сохраняются между запусками.
     private(set) var favorites: Set<IPodModel> {
         didSet { UserDefaults.standard.set(favorites.map(\.rawValue), forKey: "favorites") }
     }
+    /// Вкладки подключённых iPod — только на эту сессию, не сохраняются
+    /// (нет доступа к iPod или он не найден — их просто нет).
+    private(set) var autoTabs: Set<IPodModel> = []
 
-    /// Вкладки: избранное в порядке каталога (по году выхода).
-    var favoriteModels: [IPodModel] { IPodModel.allCases.filter { favorites.contains($0) } }
+    /// Вкладки: звёздочки + подключённые, в порядке каталога (по году выхода).
+    var favoriteModels: [IPodModel] { IPodModel.allCases.filter { favorites.contains($0) || autoTabs.contains($0) } }
 
-    func isFavorite(_ m: IPodModel) -> Bool { favorites.contains(m) }
+    func isFavorite(_ m: IPodModel) -> Bool { favorites.contains(m) || autoTabs.contains(m) }
 
     /// Идёт ли сейчас конвертация под этот iPod.
     func isConverting(for m: IPodModel) -> Bool {
@@ -320,8 +323,8 @@ final class Store {
     /// Подключили iPod: добавляем его вкладку и выбираем (если ничего не конвертируется).
     func iPodConnected(_ m: IPodModel) {
         guard !dismissedConnected.contains(m) else { return }
-        if !favorites.contains(m) { favorites.insert(m) }
-        if !isBusy || favorites.count == 1 { model = m }
+        if !isFavorite(m) { autoTabs.insert(m) }
+        if !isBusy || favoriteModels.count == 1 { model = m }
     }
 
     func iPodDisconnected(_ m: IPodModel) {
@@ -329,7 +332,7 @@ final class Store {
     }
 
     func removeTab(_ m: IPodModel) {
-        guard favorites.contains(m) else { return }   // закрыть можно и последнюю вкладку
+        guard isFavorite(m) else { return }   // закрыть можно и последнюю вкладку
         // Закрыли вкладку подключённого iPod — не навязываем её снова, пока его не переподключат.
         if IPodDetector.shared.isConnected(m) { dismissedConnected.insert(m) }
         for item in items where item.isConverting && item.usedModel == m { item.cancel() }
@@ -338,14 +341,15 @@ final class Store {
     }
 
     /// Хотя бы одна вкладка iPod выбрана. Без неё файлы не добавляются (экран «Выберите iPod»).
-    var hasIPod: Bool { !favorites.isEmpty }
+    var hasIPod: Bool { !favoriteModels.isEmpty }
 
     func toggleFavorite(_ m: IPodModel) {
-        if favorites.contains(m) {
+        if isFavorite(m) {
             favorites.remove(m)
+            autoTabs.remove(m)
             if model == m, let first = favoriteModels.first { model = first }
         } else {
-            let wasEmpty = favorites.isEmpty
+            let wasEmpty = favoriteModels.isEmpty
             favorites.insert(m)
             if wasEmpty { model = m }   // первый выбранный iPod — сразу активный
         }
@@ -442,12 +446,19 @@ final class Store {
         // Первый запуск — вкладки по умолчанию; если пользователь закрыл все — оставляем пусто.
         let firstLaunch = UserDefaults.standard.object(forKey: "favorites") == nil
         // Первый запуск — без вкладок: «Выберите iPod» (подключённый iPod добавится сам, если доступ разрешён).
-        favorites = Set(firstLaunch ? [] : saved)
+        var initial = Set(firstLaunch ? [] : saved)
+        // Раньше по умолчанию ставились 5G + nano 7 и туда же сохранялись вкладки подключённых iPod.
+        // Если сохранён ровно этот старый набор — это не выбор пользователя: сбрасываем один раз.
+        if !UserDefaults.standard.bool(forKey: "favoritesV2") {
+            if initial == Set(IPodModel.defaultFavorites) { initial = [] }
+            UserDefaults.standard.set(true, forKey: "favoritesV2")
+        }
+        favorites = initial
         let detector = IPodDetector.shared
         detector.onConnect = { [weak self] m in self?.iPodConnected(m) }
         detector.preferEnhanced5G = { [weak self] in
             guard let self else { return false }
-            return self.favorites.contains(.classic55G) && !self.favorites.contains(.classic5G)
+            return self.isFavorite(.classic55G) && !self.isFavorite(.classic5G)
         }
         detector.onDisconnect = { [weak self] m in self?.iPodDisconnected(m) }
         // Не в самотестах — им опрос USB ни к чему.
