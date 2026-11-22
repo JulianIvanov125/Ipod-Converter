@@ -17,6 +17,20 @@ struct ContentView: View {
             } else if store.items.isEmpty {
                 DropPlaceholder(isTargeted: isTargeted, title: L.dropHere, subtitle: L.orClick) { store.openPanel() }
             } else {
+                HStack {
+                    Text(L.videosCount(store.items.count))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(L.clearList) { store.clearVideos() }
+                        .buttonStyle(.link)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .disabled(store.items.contains { $0.isConverting })
+                        .help(store.items.contains { $0.isConverting } ? L.waitForConversion : "")
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 6)
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         ForEach(store.items) { item in

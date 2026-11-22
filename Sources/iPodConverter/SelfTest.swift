@@ -14,6 +14,36 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if let i = args.firstIndex(of: "--selftest-meta"), args.count > i + 2 {
+            let out = URL(fileURLWithPath: args[i + 1])
+            let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                MetadataFetcher.shared.enabled = true
+                var tracks: [TrackItem] = []
+                for f in files {
+                    let t = TrackItem(url: f)
+                    await t.load()
+                    if let info = t.info {
+                        let g = TagGuess.from(url: f, info: info)
+                        print("\(f.lastPathComponent): догадка «\(g.artist ?? "-")» / «\(g.album ?? "-")» / №\(g.trackNo.map(String.init) ?? "-") «\(g.title)»")
+                    }
+                    MetadataFetcher.shared.enqueue(t)
+                    tracks.append(t)
+                }
+                await MetadataFetcher.shared.waitUntilIdle()
+                for t in tracks {
+                    print("\(t.url.lastPathComponent): \(t.metaStatus)")
+                    for (k, v) in (t.fetched?.fields ?? [:]).sorted(by: { $0.key < $1.key }) { print("   + \(k) = \(v)") }
+                    if let c = t.fetched?.coverFile { print("   + обложка \(c.lastPathComponent)") }
+                    guard let plan = t.plan(for: .classic55G) else { continue }
+                    let p: AudioPlan = plan == .compatible && !t.needsRetag ? .aac(rate: 44100, kbps: 256) : plan
+                    let r: URL? = await withCheckedContinuation { cont in t.convert(plan: p, into: out) { cont.resume(returning: $0) } }
+                    print("   ⇒ \(r?.lastPathComponent ?? "FAILED \(t.state)")")
+                }
+                exit(0)
+            }
+            return true
+        }
         if let i = args.firstIndex(of: "--selftest-lyrics"), args.count > i + 1 {
             let files = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
             Task { @MainActor in

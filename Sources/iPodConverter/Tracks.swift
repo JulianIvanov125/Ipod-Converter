@@ -22,6 +22,8 @@ struct AudioInfo {
     var tagsInStream: Bool
     /// Оценка из файла, 0–100 (как в «Музыке»: 20 = ★, 100 = ★★★★★); nil — нет.
     var rating: Int? = nil
+    /// Все теги файла (ключи в нижнем регистре): track, date, genre, album_artist…
+    var tags: [String: String] = [:]
 
     var isLossless: Bool {
         ["flac", "alac", "ape", "wavpack", "tta", "mlp", "truehd", "wmalossless"].contains(codec)
@@ -220,7 +222,14 @@ extension FFmpeg {
             coverStreamIndex: cover?.index,
             tagsInStream: tagsInStream,
             rating: RatingReader.fromTags(fmtTags.merging(streamTags) { a, _ in a })
-                ?? (url.pathExtension.lowercased() == "mp3" ? RatingReader.popm(url) : nil)
+                ?? (url.pathExtension.lowercased() == "mp3" ? RatingReader.popm(url) : nil),
+            // Пустые значения не считаем тегами; tracknumber/year из Vorbis приводим к именам ffmpeg.
+            tags: fmtTags.merging(streamTags) { a, _ in a }
+                .filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+                .reduce(into: [String: String]()) { d, kv in
+                    let k = ["tracknumber": "track", "year": "date", "albumartist": "album_artist", "discnumber": "disc"][kv.key] ?? kv.key
+                    if d[k] == nil { d[k] = kv.value }
+                }
         )
     }
 
@@ -250,10 +259,16 @@ extension FFmpeg {
         return String(decoding: data, as: UTF8.self).contains("aac_at")
     }()
 
-    static func audioArguments(input: URL, output: URL, info: AudioInfo, plan: AudioPlan) -> [String] {
-        var args = ["-hide_banner", "-nostdin", "-y", "-i", input.path, "-map", "0:a:0"]
-        if let idx = info.coverStreamIndex { args += ["-map", "0:\(idx)"] }
+    static func audioArguments(input: URL, output: URL, info: AudioInfo, plan: AudioPlan, fetched: FetchedMeta? = nil) -> [String] {
+        // Обложка: своя из файла, иначе — найденная в интернете (вторым входом).
+        let fetchedCover = info.coverStreamIndex == nil ? fetched?.coverFile : nil
+        var args = ["-hide_banner", "-nostdin", "-y", "-i", input.path]
+        if let fetchedCover { args += ["-i", fetchedCover.path] }
+        args += ["-map", "0:a:0"]
+        if let idx = info.coverStreamIndex { args += ["-map", "0:\(idx)"] } else if fetchedCover != nil { args += ["-map", "1:0"] }
         args += ["-map_metadata", info.tagsInStream ? "0:s:a:0" : "0", "-map_chapters", "-1"]
+        // Дописываем только то, чего в файле не было.
+        for (k, v) in (fetched?.fields ?? [:]).sorted(by: { $0.key < $1.key }) { args += ["-metadata", "\(k)=\(v)"] }
         switch plan {
         case .alac(let rate):
             args += ["-c:a", "alac", "-af", "aresample=\(rate):dither_method=triangular", "-sample_fmt", "s16p"]
@@ -265,12 +280,12 @@ extension FFmpeg {
             args += ["-c:a", "copy"]
         }
         if info.channels > 2 { args += ["-ac", "2"] }
-        if info.coverStreamIndex != nil {
+        if info.coverStreamIndex != nil || fetchedCover != nil {
             // Обложку уменьшаем до 600 px: старые iPod тормозят на огромных картинках.
             args += ["-c:v", "mjpeg", "-filter:v", "scale='2*trunc(min(600,iw)/2)':-2", "-q:v", "3",
                      "-disposition:v", "attached_pic"]
         }
-        if case .mp3 = plan {
+        if output.pathExtension.lowercased() == "mp3" {
             // ID3v2.3 — его понимают и «Музыка», и старые iPod.
             args += ["-id3v2_version", "3", "-f", "mp3"]
         } else {
@@ -306,7 +321,28 @@ final class TrackItem: Identifiable {
     var rating = 0
     /// Трек в «Музыке» после добавления — чтобы менять там оценку.
     var musicPersistentID: String?
+    /// Что нашлось в интернете для пустых тегов.
+    var fetched: FetchedMeta?
+    var metaStatus: MetaStatus = .idle
     @ObservationIgnored private var job: ConversionJob?
+
+    /// Применить найденное: показываем в списке и потом пишем в готовый файл.
+    func apply(_ meta: FetchedMeta) {
+        guard !meta.isEmpty else { metaStatus = .notFound; return }
+        fetched = meta
+        metaStatus = .found
+        if info?.title == nil { info?.title = meta.fields["title"] }
+        if info?.artist == nil { info?.artist = meta.fields["artist"] }
+        if info?.album == nil { info?.album = meta.fields["album"] }
+        for (k, v) in meta.fields where info?.tags[k] == nil { info?.tags[k] = v }
+        if artwork == nil, let f = meta.coverFile, let img = NSImage(contentsOf: f) { artwork = img }
+    }
+
+    /// Подходящий по формату файл, но с найденными тегами/обложкой: переупаковка без перекодирования.
+    var needsRetag: Bool {
+        guard let f = fetched, !f.isEmpty else { return false }
+        return ["mp3", "m4a", "m4b", "mp4"].contains(url.pathExtension.lowercased())
+    }
 
     init(url: URL) { self.url = url }
 
@@ -345,8 +381,10 @@ final class TrackItem: Identifiable {
             return
         }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let output = Self.uniqueURL(in: folder, base: url.deletingPathExtension().lastPathComponent, ext: plan.ext)
-        let args = FFmpeg.audioArguments(input: url, output: output, info: info, plan: plan)
+        // «Как есть» с новыми тегами — расширение оригинала (mp3 остаётся mp3).
+        let ext = plan == .compatible ? url.pathExtension.lowercased() : plan.ext
+        let output = Self.uniqueURL(in: folder, base: url.deletingPathExtension().lastPathComponent, ext: ext)
+        let args = FFmpeg.audioArguments(input: url, output: output, info: info, plan: plan, fetched: fetched)
         let job = ConversionJob()
         self.job = job
         state = .converting(0)

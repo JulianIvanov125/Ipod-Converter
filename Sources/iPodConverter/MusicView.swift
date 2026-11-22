@@ -81,6 +81,7 @@ struct MusicSection: View {
                     .foregroundStyle(.orange)
             }
             Spacer()
+            MetaToggle()
             FormatPicker().disabled(store.isMusicBusy)
             Button(L.clearList) { store.clearTracks() }
                 .buttonStyle(.link)
@@ -162,6 +163,20 @@ struct MusicSection: View {
     }
 }
 
+/// Дополнять пустые теги и обложки из Apple Music.
+struct MetaToggle: View {
+    @Bindable private var fetcher = MetadataFetcher.shared
+
+    var body: some View {
+        Toggle(isOn: $fetcher.enabled) {
+            Label(L.metaToggle, systemImage: "sparkles").font(.system(size: 12))
+        }
+        .toggleStyle(.checkbox)
+        .controlSize(.small)
+        .help(L.metaHelp)
+    }
+}
+
 /// «Формат: [Авто ▾] [256 ▾]» — что получится на выходе.
 struct FormatPicker: View {
     @Bindable private var out = AudioOutputSettings.shared
@@ -238,9 +253,12 @@ struct TrackRow: View {
             .help(L.previewOriginal)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(track.displayTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(track.displayTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    metaBadge
+                }
                 Text(track.info?.artist ?? L.unknownArtist)
                     .font(.system(size: 12))
                     .foregroundStyle(track.info?.artist == nil ? .tertiary : .secondary)
@@ -326,6 +344,27 @@ struct TrackRow: View {
                 Text("≈ \(est)").font(.system(size: 10)).foregroundStyle(.secondary)
             }
             .help(L.aacHelp)
+        }
+    }
+
+    /// Статус поиска тегов: идёт поиск / дополнено из Apple Music / не нашлось.
+    @ViewBuilder
+    private var metaBadge: some View {
+        switch track.metaStatus {
+        case .searching:
+            ProgressView().controlSize(.mini).help(L.metaSearching)
+        case .found:
+            Image(systemName: "sparkles")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .help(L.metaFound(track.fetched?.summary ?? ""))
+        case .notFound:
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .help(L.metaNotFound)
+        case .idle:
+            EmptyView()
         }
     }
 

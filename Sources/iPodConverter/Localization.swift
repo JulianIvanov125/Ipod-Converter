@@ -181,6 +181,7 @@ enum L {
           Apple Lossless — lossless-крыніцы → ALAC 16 біт. З lossy (MP3, AAC…) lossless не зрабіць, яны застаюцца як ёсць.
           """)
     }
+    static func videosCount(_ n: Int) -> String { t("Videos: \(n)", "Видео: \(n)", "Відео: \(n)", "Відэа: \(n)") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }
@@ -319,6 +320,37 @@ enum L {
           "У файлі тексту немає. Пошук в інтернеті вимкнено.", "У файле тэксту няма. Пошук у інтэрнэце выключаны.")
     }
     static var lyricsNotSynced: String { t("Lyrics without timing", "Текст без синхронизации", "Текст без синхронізації", "Тэкст без сінхранізацыі") }
+
+    // Теги из интернета
+    static var metaToggle: String { t("Fill tags", "Дополнять теги", "Доповнювати теги", "Дапаўняць тэгі") }
+    static var metaHelp: String {
+        t("Missing tags (title, artist, album, track number, year, genre) and covers are filled from the Apple Music catalog (iTunes Search). Existing tags are never overwritten. Only artist, album and title are sent — from tags or, if there are none, from file and folder names.",
+          "Пустые теги (название, артист, альбом, номер трека, год, жанр) и обложки дополняются из каталога Apple Music (iTunes Search). То, что уже есть в файле, не перезаписывается. Отправляются только артист, альбом и название — из тегов, а если их нет, из имени файла и папок.",
+          "Порожні теги (назва, виконавець, альбом, номер треку, рік, жанр) і обкладинки доповнюються з каталогу Apple Music (iTunes Search). Те, що вже є у файлі, не перезаписується. Надсилаються лише виконавець, альбом і назва — з тегів, а якщо їх немає, з назви файлу й тек.",
+          "Пустыя тэгі (назва, выканаўца, альбом, нумар трэка, год, жанр) і вокладкі дапаўняюцца з каталога Apple Music (iTunes Search). Тое, што ўжо ёсць у файле, не перазапісваецца. Адпраўляюцца толькі выканаўца, альбом і назва — з тэгаў, а калі іх няма, з назвы файла і папак.")
+    }
+    static var metaSearching: String { t("Looking for missing tags…", "Ищу недостающие теги…", "Шукаю відсутні теги…", "Шукаю адсутныя тэгі…") }
+    static func metaFound(_ what: String) -> String {
+        t("Filled from Apple Music: \(what)", "Дополнено из Apple Music: \(what)", "Доповнено з Apple Music: \(what)", "Дапоўнена з Apple Music: \(what)")
+    }
+    static var metaNotFound: String {
+        t("No confident match in Apple Music — tags left as they are", "В Apple Music не нашлось уверенного совпадения — теги оставлены как есть",
+          "В Apple Music не знайшлося впевненого збігу — теги залишено як є", "У Apple Music не знайшлося ўпэўненага супадзення — тэгі пакінуты як ёсць")
+    }
+    static func metaField(_ key: String) -> String {
+        switch key {
+        case "title": t("title", "название", "назва", "назва")
+        case "artist": t("artist", "артист", "виконавець", "выканаўца")
+        case "album": t("album", "альбом", "альбом", "альбом")
+        case "album_artist": t("album artist", "артист альбома", "виконавець альбому", "выканаўца альбома")
+        case "track": t("track number", "номер трека", "номер треку", "нумар трэка")
+        case "disc": t("disc", "диск", "диск", "дыск")
+        case "date": t("year", "год", "рік", "год")
+        case "genre": t("genre", "жанр", "жанр", "жанр")
+        case "cover": t("cover", "обложка", "обкладинка", "вокладка")
+        default: key
+        }
+    }
 
     static var cancel: String { t("Cancel", "Отмена", "Скасувати", "Скасаваць") }
 

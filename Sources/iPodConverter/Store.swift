@@ -375,23 +375,16 @@ final class Store {
     func add(_ urls: [URL]) {
         var addedAudio = 0, addedVideo = 0
         let files = Self.expand(urls)
-        // Добавили новую папку с музыкой — это новый альбом/подборка: старый список убираем.
-        // Отдельные файлы просто дописываются; во время конвертации список не трогаем.
-        let addsFolder = urls.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-        let hasAudio = files.contains { AudioRules.audioExtensions.contains($0.pathExtension.lowercased()) }
-        if addsFolder, hasAudio, !tracks.isEmpty, !isMusicBusy {
-            if let cur = PlayerController.shared.current, !cur.isVideo { PlayerController.shared.close() }
-            tracks.removeAll()
-            musicBatchStatus = nil
-            musicScope = .all
-        }
         for file in files {
             if AudioRules.audioExtensions.contains(file.pathExtension.lowercased()) {
                 guard !tracks.contains(where: { $0.url == file }) else { continue }
                 let t = TrackItem(url: file)
                 tracks.append(t)
                 addedAudio += 1
-                Task { await t.load() }
+                Task {
+                    await t.load()
+                    MetadataFetcher.shared.enqueue(t)   // пустые теги/обложку — из интернета
+                }
             } else {
                 guard !items.contains(where: { $0.url == file }) else { continue }
                 let item = VideoItem(url: file)
@@ -518,7 +511,7 @@ final class Store {
                 }
                 self.pumpMusic(folder: folder)
             }
-            if plan == .compatible {
+            if plan == .compatible && !t.needsRetag {
                 t.copyAsIs(into: folder, completion: done)
             } else {
                 t.convert(plan: plan, into: folder, completion: done)
@@ -570,7 +563,9 @@ final class Store {
 
     func clearTracks() {
         cancelMusic()
+        if let cur = PlayerController.shared.current, !cur.isVideo { PlayerController.shared.close() }
         tracks.removeAll()
+        musicScope = .all
         musicBatchStatus = nil
     }
 
@@ -614,6 +609,13 @@ final class Store {
         let ready = items.filter { $0.state == .ready }
         guard !ready.isEmpty, ensureDestination() else { return }
         for item in ready { start(item) }
+    }
+
+    /// Очистить список видео (идущие конвертации останавливаются).
+    func clearVideos() {
+        for item in items where item.isConverting { item.cancel() }
+        if let cur = PlayerController.shared.current, cur.isVideo { PlayerController.shared.close() }
+        items.removeAll()
     }
 
     func remove(_ item: VideoItem) {
