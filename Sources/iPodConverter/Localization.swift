@@ -204,6 +204,24 @@ enum L {
     static func forSelected(_ n: Int) -> String {
         t("Type for selected (\(n)):", "Тип для выбранных (\(n)):", "Тип для вибраних (\(n)):", "Тып для выбраных (\(n)):")
     }
+    // Свои настройки выхода
+    static func outPreset(_ m: String) -> String { t("Output: \(m) preset", "Выход: пресет \(m)", "Вихід: пресет \(m)", "Выхад: прэсэт \(m)") }
+    static var outCustom: String { t("Output: custom", "Выход: свои настройки", "Вихід: свої налаштування", "Выхад: свае налады") }
+    static var outHelp: String { t("Container, codec, resolution, bitrate and audio of converted videos", "Контейнер, кодек, разрешение, битрейт и звук готовых видео", "Контейнер, кодек, роздільність, бітрейт і звук готових відео", "Кантэйнер, кодэк, раздзяляльнасць, бітрэйт і гук гатовых відэа") }
+    static var outToggle: String { t("Custom output settings", "Свои настройки выхода", "Свої налаштування виходу", "Свае налады выхаду") }
+    static func outToggleHint(_ m: String) -> String { t("Off — the automatic \(m) preset is used", "Выключено — используется автоматический пресет \(m)", "Вимкнено — використовується автоматичний пресет \(m)", "Выключана — выкарыстоўваецца аўтаматычны прэсэт \(m)") }
+    static var outContainer: String { t("Container", "Контейнер", "Контейнер", "Кантэйнер") }
+    static var outCodec: String { t("Codec", "Кодек", "Кодек", "Кодэк") }
+    static var outVideoBitrate: String { t("Video bitrate", "Битрейт видео", "Бітрейт відео", "Бітрэйт відэа") }
+    static var outAudio: String { t("Audio", "Звук", "Звук", "Гук") }
+    static var outAsPreset: String { t("As in preset", "Как в пресете", "Як у пресеті", "Як у прэсэце") }
+    static var outOriginalSize: String { t("original size", "размер оригинала", "розмір оригіналу", "памер арыгінала") }
+    static var outReset: String { t("Reset to preset", "Сбросить к пресету", "Скинути до пресету", "Скінуць да прэсэта") }
+    static func outWarning(_ m: String) -> String { t("\(m) may not play these files:", "\(m) может не воспроизвести такие файлы:", "\(m) може не відтворити такі файли:", "\(m) можа не прайграць такія файлы:") }
+    static var issueCodec: String { t("iPods play only H.264", "iPod играет только H.264", "iPod грає лише H.264", "iPod грае толькі H.264") }
+    static func issueResolution(_ w: Int, _ h: Int) -> String { t("resolution above \(w)×\(h)", "разрешение больше \(w)×\(h)", "роздільність більша за \(w)×\(h)", "раздзяляльнасць большая за \(w)×\(h)") }
+    static func issueBitrate(_ k: Int) -> String { t("video bitrate above \(k) kbps", "битрейт видео выше \(k) кбит/с", "бітрейт відео вищий за \(k) кбіт/с", "бітрэйт відэа вышэй за \(k) кбіт/с") }
+    static var issueAudio: String { t("audio above 160 kbps", "звук выше 160 кбит/с", "звук вищий за 160 кбіт/с", "гук вышэй за 160 кбіт/с") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

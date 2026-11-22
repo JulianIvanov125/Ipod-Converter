@@ -14,6 +14,26 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if args.contains("--selftest-tools") {
+            print("ffmpeg:  \(FFmpeg.tool("ffmpeg") ?? "нет")")
+            print("ffprobe: \(FFmpeg.tool("ffprobe") ?? "нет")")
+            exit(0)
+        }
+        // --out mp4:hevc:hd720 — свои настройки выхода для --selftest-video (без сохранения в настройки)
+        if let o = args.firstIndex(of: "--out"), args.count > o + 1 {
+            let p = args[o + 1].split(separator: ":").map(String.init)
+            let out = VideoOutputSettings.shared
+            let saved = UserDefaults.standard.dictionaryRepresentation().filter { $0.key.hasPrefix("out.") }
+            out.enabled = true
+            if p.count > 0 { out.container = VideoContainer(rawValue: p[0]) ?? .m4v }
+            if p.count > 1 { out.codec = VideoCodec(rawValue: p[1]) ?? .h264 }
+            if p.count > 2 { out.resolution = OutResolution(rawValue: p[2]) ?? .preset }
+            if p.count > 3 { out.videoKbps = Int(p[3]) ?? 0 }
+            restoreSettings = {
+                for k in UserDefaults.standard.dictionaryRepresentation().keys where k.hasPrefix("out.") { UserDefaults.standard.removeObject(forKey: k) }
+                for (k, v) in saved { UserDefaults.standard.set(v, forKey: k) }
+            }
+        }
         if args.contains("--selftest-search") {
             let library: [(String, String)] = [("Кино", "Группа крови"), ("Виктор Цой", "Звезда по имени Солнце"),
                 ("Океан Ельзи", "Обійми"), ("Daft Punk", "Get Lucky"), ("Чайф", "Аргентина — Ямайка 5:0"),
@@ -164,12 +184,13 @@ enum SelfTest {
                     await v.load()
                     guard let m = v.meta else { print("\(f.lastPathComponent): \(v.state)"); continue }
                     print("\(f.lastPathComponent) → \(m.category.rawValue): \(v.displayTitle)")
-                    v.convert(model: .classic55G, maxQuality: false, videoRoot: root, addToMusic: false)
+                    v.convert(model: .classic55G, settings: VideoOutputSettings.shared.apply(to: IPodModel.classic55G.settings(max: false)), videoRoot: root, addToMusic: false)
                     while v.isConverting { try? await Task.sleep(nanoseconds: 200_000_000) }
                     if case .done(let out) = v.state {
                         print("   ⇒ " + out.path.replacingOccurrences(of: root.path + "/", with: ""))
                     } else { print("   ⇒ \(v.state)") }
                 }
+                restoreSettings()
                 exit(0)
             }
             return true

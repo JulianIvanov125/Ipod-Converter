@@ -97,7 +97,7 @@ final class VideoItem: Identifiable {
     }
 
     /// videoRoot — папка «iPod Converter Video».
-    func convert(model: IPodModel, maxQuality: Bool, videoRoot: URL, addToMusic: Bool) {
+    func convert(model: IPodModel, settings: EncodeSettings, videoRoot: URL, addToMusic: Bool) {
         guard let info, !isConverting else { return }
         guard let ffmpeg = FFmpeg.tool("ffmpeg") else {
             state = .failed(FFmpegError.notFound("ffmpeg").localizedDescription)
@@ -106,8 +106,7 @@ final class VideoItem: Identifiable {
         let meta = self.meta ?? VideoMeta(category: .film, title: url.deletingPathExtension().lastPathComponent)
         let (folder, base) = Self.destination(for: meta, videoRoot: videoRoot, fallback: url)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let output = Self.uniqueURL(in: folder, base: "\(base) [\(model.fileSuffix)]")
-        let settings = model.settings(max: maxQuality)
+        let output = Self.uniqueURL(in: folder, base: "\(base) [\(model.fileSuffix)]", ext: settings.container.rawValue)
         let cover = coverFile.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
         let args = FFmpeg.arguments(input: url, output: output, info: info, settings: settings, cover: cover, meta: meta)
         usedMeta = meta
@@ -201,11 +200,11 @@ final class VideoItem: Identifiable {
         }
     }
 
-    private static func uniqueURL(in folder: URL, base: String) -> URL {
-        var candidate = folder.appendingPathComponent(base).appendingPathExtension("m4v")
+    private static func uniqueURL(in folder: URL, base: String, ext: String = "m4v") -> URL {
+        var candidate = folder.appendingPathComponent(base).appendingPathExtension(ext)
         var n = 2
         while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = folder.appendingPathComponent("\(base) \(n)").appendingPathExtension("m4v")
+            candidate = folder.appendingPathComponent("\(base) \(n)").appendingPathExtension(ext)
             n += 1
         }
         return candidate
@@ -287,7 +286,7 @@ final class Store {
     }
 
     /// Параметры для выбранной вкладки.
-    var currentSettings: EncodeSettings { model.settings(max: maxQuality) }
+    var currentSettings: EncodeSettings { VideoOutputSettings.shared.apply(to: model.settings(max: maxQuality)) }
     /// Избранные модели — из них строятся вкладки.
     private(set) var favorites: Set<IPodModel> {
         didSet { UserDefaults.standard.set(favorites.map(\.rawValue), forKey: "favorites") }
@@ -648,7 +647,7 @@ final class Store {
     }
 
     private func start(_ item: VideoItem) {
-        item.convert(model: model, maxQuality: maxQuality, videoRoot: outputFolder, addToMusic: addToMusic)
+        item.convert(model: model, settings: currentSettings, videoRoot: outputFolder, addToMusic: addToMusic)
     }
 
     // MARK: - Выбор и фильтр видео

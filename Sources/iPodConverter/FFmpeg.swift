@@ -183,15 +183,22 @@ enum FFmpeg {
             "-map_metadata", "0", "-map_chapters", "-1", "-sn", "-dn",
             // Все параметры видео — только для потока v:0, чтобы не задеть обложку.
             "-filter:v:0", "\(deinterlace)scale=\(size.w):\(size.h):flags=lanczos,setsar=1,format=yuv420p",
-            "-fpsmax:v:0", "30",
-            "-c:v:0", "libx264", "-profile:v:0", model.profile, "-level:v:0", model.level,
-            "-preset:v:0", model.profile == "baseline" ? "veryslow" : "slow",
-            "-b:v:0", "\(model.videoKbps)k",
-            "-maxrate:v:0", "\(model.maxrateKbps)k",
-            "-bufsize:v:0", "\(model.bufsizeKbps)k",
+            "-fpsmax:v:0", "\(model.fpsMax)",
         ]
-        // Старые iPod: одна опорная рамка — самый совместимый вариант.
-        if model.profile == "baseline" { args += ["-refs:v:0", "1"] }
+        switch model.codec {
+        case .h264:
+            args += ["-c:v:0", "libx264", "-profile:v:0", model.profile]
+            if !model.level.isEmpty { args += ["-level:v:0", model.level] }
+            args += ["-preset:v:0", model.profile == "baseline" ? "veryslow" : "slow",
+                     "-b:v:0", "\(model.videoKbps)k",
+                     "-maxrate:v:0", "\(model.maxrateKbps)k",
+                     "-bufsize:v:0", "\(model.bufsizeKbps)k"]
+            // Старые iPod: одна опорная рамка — самый совместимый вариант.
+            if model.profile == "baseline" { args += ["-refs:v:0", "1"] }
+        case .hevc:
+            // HEVC — аппаратный кодер Mac; метка hvc1 нужна, чтобы файл открывали QuickTime и «Музыка».
+            args += ["-c:v:0", "hevc_videotoolbox", "-tag:v:0", "hvc1", "-b:v:0", "\(model.videoKbps)k"]
+        }
         // Превью как обложка (covr): её показывают Finder, «Музыка» и iPod.
         if cover != nil {
             args += ["-map", "1:0", "-c:v:1", "copy", "-disposition:v:1", "attached_pic"]
@@ -200,7 +207,7 @@ enum FFmpeg {
             args += ["-c:a", "aac", "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)", "-ac", "2"]
         }
         if let meta { args += metadataArguments(meta) }
-        args += ["-movflags", "+faststart", "-f", "ipod", "-progress", "pipe:1", "-nostats", output.path]
+        args += ["-movflags", "+faststart", "-f", model.container.muxer, "-progress", "pipe:1", "-nostats", output.path]
         return args
     }
 

@@ -155,6 +155,8 @@ struct ContentView: View {
 
             OutputFolderControl(store: store)
 
+            OutputSettingsButton(store: store)
+
             Spacer()
 
             Toggle(isOn: $store.addToMusic) {
@@ -589,9 +591,11 @@ struct ItemCard: View {
 
             SpecColumn(header: "\(L.after) · \(target.title)" + (ts.isMax ? " · \(L.maximum)" : ""), rows: [
                 (L.resolution, "\(out.w)×\(out.h)"),
-                (L.quality, "H.264 \(ts.profileName) · \(Fmt.kbps(ts.videoKbps))"),
+                (L.quality, "\(ts.codecLabel) · \(Fmt.kbps(ts.videoKbps))"),
                 (L.size, sizePrefix + Fmt.bytes(estimate)),
-                (L.format, info.hasAudio ? "M4V · AAC \(ts.audioKbps) \(L.kbps) · 48 \(L.kHz)" : "M4V · \(L.noAudio)"),
+                (L.format, info.hasAudio
+                    ? "\(ts.container.rawValue.uppercased()) · AAC \(ts.audioKbps) \(L.kbps) · \(ts.audioRate == 44100 ? "44.1" : "48") \(L.kHz)"
+                    : "\(ts.container.rawValue.uppercased()) · \(L.noAudio)"),
             ], highlighted: true)
         }
     }

@@ -115,18 +115,39 @@ enum IPodModel: String, CaseIterable, Identifiable {
 }
 
 /// Конкретные параметры кодирования.
+enum VideoCodec: String, CaseIterable, Identifiable {
+    case h264, hevc
+    var id: String { rawValue }
+    var title: String { self == .h264 ? "H.264" : "HEVC (H.265)" }
+}
+
+enum VideoContainer: String, CaseIterable, Identifiable {
+    case m4v, mp4, mov
+    var id: String { rawValue }
+    /// Muxer ffmpeg.
+    var muxer: String { self == .m4v ? "ipod" : rawValue }
+}
+
 struct EncodeSettings: Equatable {
-    let w: Int
-    let h: Int
-    let profile: String
-    let level: String
-    let videoKbps: Int
-    let maxrateKbps: Int
-    let bufsizeKbps: Int
-    let isMax: Bool
+    var w: Int
+    var h: Int
+    var profile: String
+    var level: String
+    var videoKbps: Int
+    var maxrateKbps: Int
+    var bufsizeKbps: Int
+    var isMax: Bool
     /// AAC-LC: максимум, заявленный для iPod, — 160 кбит/с, 48 кГц.
-    var audioKbps: Int { 160 }
-    var audioRate: Int { 48000 }
+    var audioKbps: Int = 160
+    var audioRate: Int = 48000
+    var codec: VideoCodec = .h264
+    var container: VideoContainer = .m4v
+    /// Пользователь поменял пресет на свои настройки.
+    var isCustom = false
+    /// Частота кадров не выше (iPod — 30).
+    var fpsMax = 30
+
+    var codecLabel: String { codec == .h264 ? "H.264 \(profileName)" : "HEVC" }
 
     var profileName: String {
         switch profile {
