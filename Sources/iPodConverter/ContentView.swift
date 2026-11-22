@@ -288,7 +288,13 @@ struct IPodTabs: View {
                     // Подключённый iPod — его собственное имя («Julian’s iPod Nano 7»), конвертация — под модель вкладки.
                     title: dev.map { $0.name ?? L.yourIPod(m.title) } ?? m.title,
                     connected: dev != nil,
-                    hint: dev.map { L.convertsFor(m.title) + ($0.ambiguous ? "\n" + L.ambiguousHint : "") },
+                    // Память — только у подключённых (у остальных вкладок iPod нет под рукой).
+                    storage: dev.flatMap { d in d.totalBytes.map { (free: d.freeBytes ?? 0, total: $0) } },
+                    hint: dev.map { d in
+                        L.convertsFor(m.title)
+                            + (d.totalBytes.map { "\n" + L.storageLine(free: Fmt.bytes(d.freeBytes ?? 0), total: Fmt.bytes($0)) } ?? "")
+                            + (d.ambiguous ? "\n" + L.ambiguousHint : "")
+                    },
                     modelChoices: dev.flatMap { d in
                         d.ambiguous ? [IPodModel.classic5G, .classic55G].map { alt in
                             (L.thisIs(alt.title), alt == m, { IPodDetector.shared.setModel(alt, for: d) })
@@ -322,6 +328,8 @@ struct IPodTabs: View {
 private struct IPodTab: View {
     let title: String
     var connected = false
+    /// Память подключённого iPod: свободно и всего.
+    var storage: (free: Int64, total: Int64)? = nil
     /// Подсказка для подключённого iPod: под какую модель конвертируем.
     var hint: String? = nil
     /// Правый клик: «Это iPod 5G / 5.5G» — когда модель не определить автоматически.
@@ -344,6 +352,22 @@ private struct IPodTab: View {
             Text(title)
                 .font(.system(size: 12, weight: selected ? .semibold : .regular))
                 .lineLimit(1)
+            if let st = storage, st.total > 0 {
+                // Объём и заполненность, как в Finder: полоска занятого и общий размер.
+                let used = Double(st.total - st.free) / Double(st.total)
+                HStack(spacing: 4) {
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.tint(0.12))
+                        Capsule().fill(used > 0.95 ? Color.red : used > 0.85 ? Color.orange : Color.accentColor)
+                            .frame(width: max(2, 26 * used))
+                    }
+                    .frame(width: 26, height: 4)
+                    Text(Fmt.bytes(st.total))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize()
+            }
             if canRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
