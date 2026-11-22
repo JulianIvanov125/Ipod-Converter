@@ -449,9 +449,13 @@ final class Store {
         var initial = Set(firstLaunch ? [] : saved)
         // Раньше по умолчанию ставились 5G + nano 7 и туда же сохранялись вкладки подключённых iPod.
         // Если сохранён ровно этот старый набор — это не выбор пользователя: сбрасываем один раз.
-        if !UserDefaults.standard.bool(forKey: "favoritesV2") {
-            if initial == Set(IPodModel.defaultFavorites) { initial = [] }
-            UserDefaults.standard.set(true, forKey: "favoritesV2")
+        // (didSet в init не срабатывает — поэтому записываем в настройки явно.)
+        if !UserDefaults.standard.bool(forKey: "favoritesV3") {
+            if initial == Set(IPodModel.defaultFavorites) {
+                initial = []
+                UserDefaults.standard.set([String](), forKey: "favorites")
+            }
+            UserDefaults.standard.set(true, forKey: "favoritesV3")
         }
         favorites = initial
         let detector = IPodDetector.shared
