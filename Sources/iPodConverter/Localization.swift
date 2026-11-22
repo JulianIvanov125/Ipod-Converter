@@ -426,6 +426,9 @@ enum L {
     static var fullscreen: String { t("Full screen", "На весь экран", "На весь екран", "На ўвесь экран") }
     static var exitFullscreen: String { t("Exit full screen", "Выйти из полноэкранного режима", "Вийти з повноекранного режиму", "Выйсці з поўнаэкраннага рэжыму") }
     static var closePlayer: String { t("Close player", "Закрыть плеер", "Закрити плеєр", "Закрыць плэер") }
+    static var volume: String { t("Volume", "Громкость", "Гучність", "Гучнасць") }
+    static var mute: String { t("Mute", "Выключить звук", "Вимкнути звук", "Выключыць гук") }
+    static var unmute: String { t("Unmute", "Включить звук", "Увімкнути звук", "Уключыць гук") }
 
     // Оценки
     static var colRating: String { t("Rating", "Оценка", "Оцінка", "Ацэнка") }

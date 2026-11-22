@@ -104,6 +104,15 @@ final class PlayerController {
 
     func cycleRepeat() { repeatMode = repeatMode.next }
 
+    /// Громкость 0…1 (общая для видео и треков, запоминается).
+    var volume: Float {
+        didSet { player.volume = volume; UserDefaults.standard.set(volume, forKey: "playerVolume") }
+    }
+    /// Без звука (громкость при этом сохраняется).
+    var muted: Bool {
+        didSet { player.isMuted = muted; UserDefaults.standard.set(muted, forKey: "playerMuted") }
+    }
+
     private(set) var isPlaying = false
     var currentTime: Double = 0
     private(set) var duration: Double = 0
@@ -132,6 +141,10 @@ final class PlayerController {
     private init() {
         repeatMode = RepeatMode(rawValue: UserDefaults.standard.string(forKey: "repeatMode") ?? "") ?? .off
         shuffle = UserDefaults.standard.bool(forKey: "shuffle")
+        volume = UserDefaults.standard.object(forKey: "playerVolume") as? Float ?? 1
+        muted = UserDefaults.standard.bool(forKey: "playerMuted")
+        player.volume = volume
+        player.isMuted = muted
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] t in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -417,6 +430,7 @@ struct PlayerControls: View {
                            active: controller.repeatMode != .off, size: 12, dark: dark,
                            help: L.repeatHelp(controller.repeatMode)) { controller.cycleRepeat() }
                 Spacer()
+                VolumeControl(controller: controller, dark: dark)
                 if fullscreen {
                     button("arrow.down.right.and.arrow.up.left", L.exitFullscreen, size: 13) { controller.exitFullscreen() }
                 } else {
@@ -454,6 +468,40 @@ struct PlayerControls: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// Громкость: значок динамика (клик — без звука) и ползунок.
+struct VolumeControl: View {
+    @Bindable var controller: PlayerController
+    var dark = false
+
+    private var icon: String {
+        if controller.muted || controller.volume == 0 { return "speaker.slash.fill" }
+        return controller.volume < 0.34 ? "speaker.wave.1.fill" : controller.volume < 0.67 ? "speaker.wave.2.fill" : "speaker.wave.3.fill"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button {
+                if controller.volume == 0 { controller.volume = 0.5; controller.muted = false }
+                else { controller.muted.toggle() }
+            } label: {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .frame(width: 22, height: 22, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(controller.muted ? L.unmute : L.mute)
+            Slider(value: Binding(get: { Double(controller.muted ? 0 : controller.volume) },
+                                  set: { controller.volume = Float($0); if $0 > 0 { controller.muted = false } }),
+                   in: 0...1)
+                .controlSize(.mini)
+                .frame(width: 80)
+                .help(L.volume)
+        }
+        .foregroundStyle(dark ? Color.white.opacity(0.85) : Color.secondary)
     }
 }
 
@@ -658,6 +706,7 @@ struct MusicPlayerBar: View {
 
                 // Справа: полный экран и закрыть
                 HStack(spacing: 14) {
+                    VolumeControl(controller: controller)
                     LyricsButton(controller: controller)
                     barButton("arrow.up.left.and.arrow.down.right", L.fullscreen, 14) { controller.openFullscreen() }
                     barButton("xmark", L.closePlayer, 13) { controller.close() }
