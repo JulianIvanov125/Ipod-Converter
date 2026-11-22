@@ -239,7 +239,9 @@ final class Store {
     /// То, что видно в списке: после поиска и сортировки. По нему же идут «следующий/предыдущий» в плеере.
     var visibleTracks: [TrackItem] {
         var list = tracks.filter { t in
-            TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent])
+            // «Выбранные» — показываем только отмеченные; «Все» — весь список (отметки остаются).
+            (musicScope == .all || t.isChecked)
+                && TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent])
         }
         guard let key = trackSort else { return list }
         let m = model
@@ -513,9 +515,14 @@ final class Store {
     // MARK: - Музыка
 
     /// Треки, которые пойдут в работу: все или только отмеченные.
+    /// Что пойдёт в конвертацию: отмеченные (если есть), иначе всё, что видно в списке.
     var tracksInScope: [TrackItem] {
-        musicScope == .all ? tracks : tracks.filter(\.isChecked)
+        let visible = visibleTracks
+        let checked = visible.filter(\.isChecked)
+        return checked.isEmpty ? visible : checked
     }
+
+    var hasCheckedTracks: Bool { visibleTracks.contains(where: \.isChecked) }
 
     var convertibleTracks: [TrackItem] {
         tracksInScope.filter { t in
@@ -624,15 +631,13 @@ final class Store {
         }
     }
 
-    /// Отметили трек — сразу переключаемся на «Выбранные», чтобы конвертировались только они.
+    /// Отметка не переключает вид: «Выбранные» — отдельный фильтр списка.
     func setChecked(_ t: TrackItem, _ value: Bool) {
         t.isChecked = value
-        if value { musicScope = .selected }
     }
 
     /// Отметить/снять видимые треки (с учётом поиска).
     func setAllChecked(_ value: Bool) {
-        if value { musicScope = .selected }
         for t in visibleTracks { t.isChecked = value }
     }
 
@@ -659,9 +664,12 @@ final class Store {
 
     /// Что видно в списке (с учётом фильтра по типу).
     var visibleVideos: [VideoItem] {
-        guard let f = videoFilter else { return items }
-        return items.filter { $0.meta?.category == f }
+        items.filter { v in
+            (videoScope == .all || v.isChecked) && (videoFilter == nil || v.meta?.category == videoFilter)
+        }
     }
+
+    var hasCheckedVideos: Bool { visibleVideos.contains(where: \.isChecked) }
 
     func videoCount(_ c: VideoCategory?) -> Int {
         c.map { cat in items.filter { $0.meta?.category == cat }.count } ?? items.count
@@ -671,8 +679,9 @@ final class Store {
 
     /// Что пойдёт в конвертацию по кнопке внизу: видимые (фильтр) — все или только отмеченные.
     var videosToConvert: [VideoItem] {
-        let base = videoScope == .all ? visibleVideos : visibleVideos.filter(\.isChecked)
-        return base.filter { v in
+        let visible = visibleVideos
+        let checked = visible.filter(\.isChecked)
+        return (checked.isEmpty ? visible : checked).filter { v in
             switch v.state {
             case .ready, .failed, .done: v.info != nil
             default: false
@@ -680,14 +689,11 @@ final class Store {
         }
     }
 
-    /// Отметили — включаем «Выбранные», чтобы конвертировалось только отмеченное.
     func setVideoChecked(_ v: VideoItem, _ value: Bool) {
         v.isChecked = value
-        if value { videoScope = .selected }
     }
 
     func setAllVideosChecked(_ value: Bool) {
-        if value { videoScope = .selected }
         for v in visibleVideos { v.isChecked = value }
     }
 

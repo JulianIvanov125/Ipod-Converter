@@ -14,6 +14,24 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if let i = args.firstIndex(of: "--selftest-scope"), args.count > i + 1 {
+            let files = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                let st = Store()
+                for f in files { let t = TrackItem(url: f); await t.load(); st.tracks.append(t) }
+                @MainActor func line(_ title: String) {
+                    print("\(title): в списке \(st.visibleTracks.count), к конвертации \(st.convertibleTracks.count)\(st.hasCheckedTracks ? " (выбранные)" : "")")
+                }
+                st.musicScope = .all; line("Все, ничего не отмечено")
+                st.setChecked(st.tracks[0], true); st.setChecked(st.tracks[2], true); line("Все, отмечено 2")
+                st.musicScope = .selected; line("Выбранные, отмечено 2")
+                st.setChecked(st.tracks[0], false); line("Выбранные, сняли одну")
+                st.musicScope = .all; line("Снова Все")
+                st.setAllChecked(false); st.musicScope = .selected; line("Выбранные, ничего не отмечено")
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-tools") {
             print("ffmpeg:  \(FFmpeg.tool("ffmpeg") ?? "нет")")
             print("ffprobe: \(FFmpeg.tool("ffprobe") ?? "нет")")

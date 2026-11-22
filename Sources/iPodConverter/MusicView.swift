@@ -30,7 +30,7 @@ struct MusicSection: View {
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         if store.visibleTracks.isEmpty {
-                            Text(L.searchNothing)
+                            Text(store.musicScope == .selected && !store.tracks.contains(where: \.isChecked) ? L.nothingChecked : L.searchNothing)
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 30)
@@ -81,11 +81,6 @@ struct MusicSection: View {
                 .font(.system(size: 12))
                 .disabled(store.isMusicBusy)
 
-            if store.musicScope == .all && store.tracks.contains(where: \.isChecked) {
-                Label(L.checkedIgnored, systemImage: "exclamationmark.circle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.orange)
-            }
             Spacer()
             MetaToggle()
             FormatPicker().disabled(store.isMusicBusy)
@@ -183,7 +178,8 @@ struct MusicSection: View {
                 Button {
                     store.convertTracks()
                 } label: {
-                    Label(L.convertN(store.convertibleTracks.count), systemImage: "arrow.triangle.2.circlepath")
+                    Label(store.hasCheckedTracks ? L.convertSelectedN(store.convertibleTracks.count) : L.convertN(store.convertibleTracks.count),
+                          systemImage: "arrow.triangle.2.circlepath")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(store.convertibleTracks.isEmpty)

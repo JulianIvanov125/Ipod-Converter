@@ -21,7 +21,7 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         if store.visibleVideos.isEmpty {
-                            Text(L.searchNothing).font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 30)
+                            Text(store.videoScope == .selected && store.checkedVideos.isEmpty ? L.nothingChecked : L.searchNothing).font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 30)
                         }
                         ForEach(store.visibleVideos) { item in
                             ItemCard(
@@ -170,7 +170,8 @@ struct ContentView: View {
             Button {
                 store.convertAll()
             } label: {
-                Label(L.convertN(store.videosToConvert.count), systemImage: "arrow.triangle.2.circlepath")
+                Label(store.hasCheckedVideos ? L.convertSelectedN(store.videosToConvert.count) : L.convertN(store.videosToConvert.count),
+                      systemImage: "arrow.triangle.2.circlepath")
             }
             .buttonStyle(.borderedProminent)
             .disabled(store.videosToConvert.isEmpty || store.items.contains { $0.isConverting })

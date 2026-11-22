@@ -222,6 +222,13 @@ enum L {
     static func issueResolution(_ w: Int, _ h: Int) -> String { t("resolution above \(w)×\(h)", "разрешение больше \(w)×\(h)", "роздільність більша за \(w)×\(h)", "раздзяляльнасць большая за \(w)×\(h)") }
     static func issueBitrate(_ k: Int) -> String { t("video bitrate above \(k) kbps", "битрейт видео выше \(k) кбит/с", "бітрейт відео вищий за \(k) кбіт/с", "бітрэйт відэа вышэй за \(k) кбіт/с") }
     static var issueAudio: String { t("audio above 160 kbps", "звук выше 160 кбит/с", "звук вищий за 160 кбіт/с", "гук вышэй за 160 кбіт/с") }
+    static func convertSelectedN(_ n: Int) -> String {
+        t("Convert selected (\(n))", "Конвертировать выбранные (\(n))", "Конвертувати вибрані (\(n))", "Канвертаваць выбраныя (\(n))")
+    }
+    static var nothingChecked: String {
+        t("Nothing is checked — tick files in “All”", "Ничего не отмечено — отметьте файлы во «Все»",
+          "Нічого не позначено — позначте файли в «Усі»", "Нічога не адзначана — адзначце файлы ва «Усе»")
+    }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }
