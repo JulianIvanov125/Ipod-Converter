@@ -282,6 +282,19 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-classify"), args.count > i + 1 {
+            // Как приложение поймёт видео: тип, исполнитель, название.
+            let files = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                for f in files {
+                    guard let info = try? await FFmpeg.probe(f) else { print("\(f.lastPathComponent): не читается"); continue }
+                    let m = VideoClassifier.guess(url: f, info: info)
+                    print("\(f.lastPathComponent)\n   → \(m.category.rawValue): «\(m.artist)» — «\(m.title)»")
+                }
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-detect") {
             // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
             Task { @MainActor in

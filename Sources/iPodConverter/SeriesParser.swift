@@ -234,11 +234,30 @@ enum SeriesParser {
 // MARK: - Автоопределение категории
 
 enum VideoClassifier {
+    /// «Unknown Artist» и подобные заглушки других программ — это не исполнитель.
+    static func isPlaceholderArtist(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespaces).lowercased()
+        return t.isEmpty || ["unknown artist", "unknown", "artist", "неизвестный исполнитель", "неизвестный артист",
+                             "невідомий виконавець", "невядомы выканаўца", "<unknown>"].contains(t)
+    }
+
+    /// Хвосты от прошлых конвертаций: «_ipod5g_480», «_ipod_nano7_ipod_nano7», «[iPod 5.5G]».
+    static func stripConverterSuffix(_ s: String) -> String {
+        var t = s
+        let pattern = #"(\s*\[iPod[^\]]*\]|_ipod[a-z0-9_]*|_\d{3,4}p?)+$"#
+        while let r = t.range(of: pattern, options: [.regularExpression, .caseInsensitive]), !r.isEmpty {
+            t.removeSubrange(r)
+        }
+        return t.trimmingCharacters(in: .whitespaces)
+    }
+
     static func guess(url: URL, info: MediaInfo) -> VideoMeta {
-        let base = url.deletingPathExtension().lastPathComponent
+        let base = stripConverterSuffix(url.deletingPathExtension().lastPathComponent)
         let parent = url.deletingLastPathComponent().lastPathComponent
         let grand = url.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
         let tags = info.tags
+        let artistTag = info.artist.flatMap { isPlaceholderArtist($0) ? nil : $0 }
+        let titleTag = info.title.map(stripConverterSuffix).flatMap { $0.isEmpty ? nil : $0 }
 
         // 1. Теги сериала в самом файле.
         if let show = tags["show"], let ep = Int(tags["episode_sort"] ?? "") {
@@ -251,21 +270,24 @@ enum VideoClassifier {
         }
         // 3. Клип: есть артист в тегах или «Артист - Песня» и короче 15 минут.
         let cleaned = SeriesParser.clean(SeriesParser.normalize(base))
-        if let artist = info.artist {
-            return VideoMeta(category: .musicVideo, title: info.title ?? cleaned, artist: artist)
+        if let artist = artistTag {
+            return VideoMeta(category: .musicVideo, title: titleTag ?? cleaned, artist: artist)
         }
+        // «Артист - Песня» — из тега названия (у старых конвертаций он полный), иначе из имени файла.
+        let dashSource = titleTag.map { SeriesParser.clean(SeriesParser.normalize($0)) }
+            .flatMap { $0.range(of: #"\s[\-–—]\s"#, options: .regularExpression) != nil ? $0 : nil } ?? cleaned
         if info.duration > 0, info.duration < 15 * 60,
-           let dash = cleaned.range(of: #"\s[\-–—]\s"#, options: .regularExpression) {
+           let dash = dashSource.range(of: #"\s[\-–—]\s"#, options: .regularExpression) {
             return VideoMeta(category: .musicVideo,
-                             title: String(cleaned[dash.upperBound...]).trimmingCharacters(in: .whitespaces),
-                             artist: String(cleaned[..<dash.lowerBound]).trimmingCharacters(in: .whitespaces))
+                             title: String(dashSource[dash.upperBound...]).trimmingCharacters(in: .whitespaces),
+                             artist: String(dashSource[..<dash.lowerBound]).trimmingCharacters(in: .whitespaces))
         }
         // 4. Фильм: название до года, год отдельно.
-        var title = info.title ?? cleaned
+        var title = titleTag ?? cleaned
         var year = ""
         if let r = base.range(of: #"(?<!\d)(19[3-9]\d|20[0-4]\d)(?!\d)"#, options: .regularExpression) {
             year = String(base[r])
-            if info.title == nil {
+            if titleTag == nil {
                 let before = SeriesParser.clean(SeriesParser.normalize(String(base[..<r.lowerBound])))
                 if !before.isEmpty { title = before }
             }
