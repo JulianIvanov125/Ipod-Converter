@@ -195,6 +195,15 @@ enum L {
     static var sortAscHelp: String { t("Sort ascending", "Сортировать по возрастанию", "Сортувати за зростанням", "Сартаваць па ўзрастанні") }
     static var sortDescHelp: String { t("Sort descending", "Сортировать по убыванию", "Сортувати за спаданням", "Сартаваць па змяншэнні") }
     static var sortResetHelp: String { t("Back to the original order", "Вернуть исходный порядок", "Повернути початковий порядок", "Вярнуць першапачатковы парадак") }
+    static func scopeAllVideos(_ n: Int) -> String { t("All (\(n))", "Все (\(n))", "Усі (\(n))", "Усе (\(n))") }
+    static func filterAll(_ n: Int) -> String { t("All \(n)", "Все \(n)", "Усі \(n)", "Усе \(n)") }
+    static var filterHelp: String {
+        t("Show only music videos, films or series", "Показывать только клипы, фильмы или сериалы",
+          "Показувати лише кліпи, фільми або серіали", "Паказваць толькі кліпы, фільмы або серыялы")
+    }
+    static func forSelected(_ n: Int) -> String {
+        t("Type for selected (\(n)):", "Тип для выбранных (\(n)):", "Тип для вибраних (\(n)):", "Тып для выбраных (\(n)):")
+    }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

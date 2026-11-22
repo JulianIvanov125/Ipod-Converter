@@ -18,6 +18,8 @@ final class VideoItem: Identifiable {
     let url: URL
     var info: MediaInfo?
     var thumbnail: NSImage?
+    /// Отмечено галочкой (режим «Выбранные»).
+    var isChecked = false
     /// Категория и теги (определяются автоматически, пользователь может поправить).
     var meta: VideoMeta?
     /// JPEG-превью во временной папке — вшивается в готовый файл как обложка.
@@ -104,7 +106,7 @@ final class VideoItem: Identifiable {
         let meta = self.meta ?? VideoMeta(category: .film, title: url.deletingPathExtension().lastPathComponent)
         let (folder, base) = Self.destination(for: meta, videoRoot: videoRoot, fallback: url)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let output = Self.uniqueURL(in: folder, base: "\(base) (\(model.fileSuffix))")
+        let output = Self.uniqueURL(in: folder, base: "\(base) [\(model.fileSuffix)]")
         let settings = model.settings(max: maxQuality)
         let cover = coverFile.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
         let args = FFmpeg.arguments(input: url, output: output, info: info, settings: settings, cover: cover, meta: meta)
@@ -649,10 +651,63 @@ final class Store {
         item.convert(model: model, maxQuality: maxQuality, videoRoot: outputFolder, addToMusic: addToMusic)
     }
 
+    // MARK: - Выбор и фильтр видео
+
+    /// Все или только отмеченные.
+    var videoScope: MusicScope = .all
+    /// Фильтр по типу: nil — все, иначе только клипы / фильмы / сериалы.
+    var videoFilter: VideoCategory?
+
+    /// Что видно в списке (с учётом фильтра по типу).
+    var visibleVideos: [VideoItem] {
+        guard let f = videoFilter else { return items }
+        return items.filter { $0.meta?.category == f }
+    }
+
+    func videoCount(_ c: VideoCategory?) -> Int {
+        c.map { cat in items.filter { $0.meta?.category == cat }.count } ?? items.count
+    }
+
+    var checkedVideos: [VideoItem] { items.filter(\.isChecked) }
+
+    /// Что пойдёт в конвертацию по кнопке внизу: видимые (фильтр) — все или только отмеченные.
+    var videosToConvert: [VideoItem] {
+        let base = videoScope == .all ? visibleVideos : visibleVideos.filter(\.isChecked)
+        return base.filter { v in
+            switch v.state {
+            case .ready, .failed, .done: v.info != nil
+            default: false
+            }
+        }
+    }
+
+    /// Отметили — включаем «Выбранные», чтобы конвертировалось только отмеченное.
+    func setVideoChecked(_ v: VideoItem, _ value: Bool) {
+        v.isChecked = value
+        if value { videoScope = .selected }
+    }
+
+    func setAllVideosChecked(_ value: Bool) {
+        if value { videoScope = .selected }
+        for v in visibleVideos { v.isChecked = value }
+    }
+
+    /// Поменять тип всем отмеченным: Клип / Фильм / Сериал.
+    func applyCategory(_ c: VideoCategory) {
+        for v in checkedVideos where !v.isConverting {
+            guard var m = v.meta else { continue }
+            if m.category == c { continue }
+            m.category = c
+            // Для сериала без названия шоу берём название файла/фильма.
+            if c == .serial && m.show.isEmpty { m.show = m.title.isEmpty ? v.url.deletingPathExtension().lastPathComponent : m.title }
+            v.meta = m
+        }
+    }
+
     func convertAll() {
-        let ready = items.filter { $0.state == .ready }
-        guard !ready.isEmpty, ensureDestination() else { return }
-        for item in ready { start(item) }
+        let list = videosToConvert
+        guard !list.isEmpty, ensureDestination() else { return }
+        for item in list { start(item) }
     }
 
     /// Очистить список видео (идущие конвертации останавливаются).
@@ -660,6 +715,8 @@ final class Store {
         for item in items where item.isConverting { item.cancel() }
         if let cur = PlayerController.shared.current, cur.isVideo { PlayerController.shared.close() }
         items.removeAll()
+        videoScope = .all
+        videoFilter = nil
     }
 
     func remove(_ item: VideoItem) {

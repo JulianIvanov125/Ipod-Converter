@@ -17,30 +17,21 @@ struct ContentView: View {
             } else if store.items.isEmpty {
                 DropPlaceholder(isTargeted: isTargeted, title: L.dropHere, subtitle: L.orClick) { store.openPanel() }
             } else {
-                HStack {
-                    Text(L.videosCount(store.items.count))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(L.clearList) { store.clearVideos() }
-                        .buttonStyle(.link)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .disabled(store.items.contains { $0.isConverting })
-                        .help(store.items.contains { $0.isConverting } ? L.waitForConversion : "")
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 6)
+                VideoToolbar(store: store)
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        ForEach(store.items) { item in
+                        if store.visibleVideos.isEmpty {
+                            Text(L.searchNothing).font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 30)
+                        }
+                        ForEach(store.visibleVideos) { item in
                             ItemCard(
                                 item: item,
                                 model: store.model,
                                 settings: store.currentSettings,
                                 onConvert: { store.convert(item) },
                                 onRemove: { store.remove(item) },
-                                onPreview: { store.playVideo(item, converted: $0) }
+                                onPreview: { store.playVideo(item, converted: $0) },
+                                onCheck: { store.setVideoChecked(item, $0) }
                             )
                         }
                     }
@@ -174,14 +165,13 @@ struct ContentView: View {
             .controlSize(.small)
             .help(L.toLibraryHelp)
 
-            if store.items.filter({ $0.state == .ready }).count > 1 {
-                Button {
-                    store.convertAll()
-                } label: {
-                    Label(L.convertAll, systemImage: "arrow.triangle.2.circlepath")
-                }
-                .buttonStyle(.borderedProminent)
+            Button {
+                store.convertAll()
+            } label: {
+                Label(L.convertN(store.videosToConvert.count), systemImage: "arrow.triangle.2.circlepath")
             }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.videosToConvert.isEmpty || store.items.contains { $0.isConverting })
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -474,6 +464,7 @@ struct ItemCard: View {
     let onConvert: () -> Void
     let onRemove: () -> Void
     let onPreview: (Bool) -> Void
+    let onCheck: (Bool) -> Void
     @State private var confirmRemove = false
     @State private var hoverThumb = false
 
@@ -517,6 +508,9 @@ struct ItemCard: View {
 
     private var titleRow: some View {
         HStack(spacing: 14) {
+            Toggle("", isOn: Binding(get: { item.isChecked }, set: { onCheck($0) }))
+                .toggleStyle(.checkbox)
+                .labelsHidden()
             ZStack {
                 RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.85))
                 if let img = item.thumbnail {
@@ -703,6 +697,65 @@ struct ItemCard: View {
     }
 }
 
+// MARK: - Панель над списком видео: выбор, фильтр по типу, тип для выбранных
+
+struct VideoToolbar: View {
+    @Bindable var store: Store
+
+    var body: some View {
+        let busy = store.items.contains { $0.isConverting }
+        let checked = store.checkedVideos.count
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Picker("", selection: $store.videoScope) {
+                    Text(L.scopeAllVideos(store.visibleVideos.count)).tag(Store.MusicScope.all)
+                    Text(L.scopeSelected(checked)).tag(Store.MusicScope.selected)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .disabled(busy)
+
+                let allChecked = !store.visibleVideos.isEmpty && store.visibleVideos.allSatisfy(\.isChecked)
+                Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllVideosChecked(!allChecked) }
+                    .buttonStyle(.link).font(.system(size: 12)).disabled(busy)
+
+                Spacer()
+
+                // Фильтр: показываем только выбранный тип
+                Picker("", selection: $store.videoFilter) {
+                    Text(L.filterAll(store.videoCount(nil))).tag(VideoCategory?.none)
+                    ForEach(VideoCategory.allCases) { c in
+                        Label("\(c.pluralName) \(store.videoCount(c))", systemImage: c.icon).tag(VideoCategory?.some(c))
+                    }
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .help(L.filterHelp)
+
+                Button(L.clearList) { store.clearVideos() }
+                    .buttonStyle(.link).font(.system(size: 12)).foregroundStyle(.secondary)
+                    .disabled(busy)
+                    .help(busy ? L.waitForConversion : "")
+            }
+            // Тип для всех отмеченных разом
+            if checked > 0 {
+                HStack(spacing: 8) {
+                    Text(L.forSelected(checked)).font(.system(size: 12)).foregroundStyle(.secondary)
+                    ForEach(VideoCategory.allCases) { c in
+                        Button {
+                            store.applyCategory(c)
+                        } label: {
+                            Label(c.localizedName, systemImage: c.icon).font(.system(size: 12))
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .disabled(busy)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 8)
+    }
+}
+
 // MARK: - Категория и теги видео
 
 extension VideoCategory {
@@ -711,6 +764,14 @@ extension VideoCategory {
         case .musicVideo: L.t("Music video", "Клип", "Кліп", "Кліп")
         case .film: L.t("Film", "Фильм", "Фільм", "Фільм")
         case .serial: L.t("TV series", "Сериал", "Серіал", "Серыял")
+        }
+    }
+
+    var pluralName: String {
+        switch self {
+        case .musicVideo: L.t("Music videos", "Клипы", "Кліпи", "Кліпы")
+        case .film: L.t("Films", "Фильмы", "Фільми", "Фільмы")
+        case .serial: L.t("Series", "Сериалы", "Серіали", "Серыялы")
         }
     }
 
