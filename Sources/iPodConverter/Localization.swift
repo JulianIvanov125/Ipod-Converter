@@ -302,6 +302,18 @@ enum L {
           "Трэк ужо ў «Музыцы» — ацэнка змяняецца і там.")
     }
 
+    // Режимы плеера
+    static var shuffleOff: String { t("Shuffle: off", "Случайный порядок: выключен", "Випадковий порядок: вимкнено", "Выпадковы парадак: выключаны") }
+    static var shuffleOn: String { t("Shuffle: on", "Случайный порядок: включён", "Випадковий порядок: увімкнено", "Выпадковы парадак: уключаны") }
+    static func repeatHelp(_ m: RepeatMode) -> String {
+        switch m {
+        case .off: t("Repeat: off — stops at the end of the list", "Повтор: выключен — в конце списка остановится", "Повтор: вимкнено — у кінці списку зупиниться", "Паўтор: выключаны — у канцы спіса спыніцца")
+        case .all: t("Repeat: whole list", "Повтор: весь список по кругу", "Повтор: увесь список по колу", "Паўтор: увесь спіс па крузе")
+        case .one: t("Repeat: this track", "Повтор: один трек", "Повтор: один трек", "Паўтор: адзін трэк")
+        }
+    }
+    static var showLyricsNow: String { t("Show lyrics", "Показать текст песни", "Показати текст пісні", "Паказаць тэкст песні") }
+
     // Текст песни
     static var showLyrics: String { t("Show lyrics", "Показывать текст песни", "Показувати текст пісні", "Паказваць тэкст песні") }
     static var lyricsOnline: String { t("Search online (lrclib.net)", "Искать в интернете (lrclib.net)", "Шукати в інтернеті (lrclib.net)", "Шукаць у інтэрнэце (lrclib.net)") }

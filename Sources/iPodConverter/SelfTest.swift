@@ -14,6 +14,34 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if args.contains("--selftest-queue") {
+            func run(_ title: String, start: Int, shuffle: Bool, repeatAll: Bool, steps: Int) {
+                var q = PlayQueue()
+                q.reset(count: 5, start: start, shuffle: shuffle)
+                var seq = [q.current]
+                for _ in 0..<steps {
+                    if q.isAtEnd && repeatAll && shuffle { seq.append(q.newShuffledRound()); continue }
+                    guard let n = q.next(repeatAll: repeatAll) else { seq.append(-1); break }
+                    q.move(to: n)
+                    seq.append(n)
+                }
+                print(title + ": " + seq.map { $0 < 0 ? "стоп" : "\($0 + 1)" }.joined(separator: " → "))
+            }
+            run("по порядку, повтор выкл, с 2-го", start: 1, shuffle: false, repeatAll: false, steps: 10)
+            run("по порядку, повтор списка   ", start: 3, shuffle: false, repeatAll: true, steps: 8)
+            run("перемешано, повтор выкл     ", start: 2, shuffle: true, repeatAll: false, steps: 10)
+            run("перемешано, повтор списка   ", start: 0, shuffle: true, repeatAll: true, steps: 14)
+            var q = PlayQueue(); q.reset(count: 5, start: 0, shuffle: false)
+            print("«назад» с первого: повтор выкл → \(q.previous(repeatAll: false).map { "\($0 + 1)" } ?? "нет"), повтор списка → \(q.previous(repeatAll: true).map { "\($0 + 1)" } ?? "нет")")
+            // Каждый круг перемешивания содержит все треки ровно по разу
+            var ok = true
+            for _ in 0..<200 {
+                var qq = PlayQueue(); qq.reset(count: 7, start: Int.random(in: 0..<7), shuffle: true)
+                if Set(qq.order).count != 7 || qq.order.first != qq.current { ok = false }
+            }
+            print("200 перемешиваний: все треки по разу и текущий первым — \(ok ? "да" : "НЕТ")")
+            exit(0)
+        }
         if let i = args.firstIndex(of: "--selftest-meta"), args.count > i + 2 {
             let out = URL(fileURLWithPath: args[i + 1])
             let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }

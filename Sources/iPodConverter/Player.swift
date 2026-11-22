@@ -20,6 +20,60 @@ struct PlayEntry: Identifiable, Equatable {
     static func == (a: PlayEntry, b: PlayEntry) -> Bool { a.id == b.id }
 }
 
+// MARK: - Очередь: порядок, перемешивание, повтор
+
+enum RepeatMode: String, CaseIterable {
+    case off, all, one
+    var next: RepeatMode { self == .off ? .all : self == .all ? .one : .off }
+}
+
+/// Порядок проигрывания. При перемешивании текущий трек остаётся первым, остальные — в случайном порядке;
+/// при повторе списка после последнего снова идёт первый (а при перемешивании — новый случайный круг).
+struct PlayQueue {
+    private(set) var order: [Int] = []
+    private(set) var current = 0
+
+    var position: Int { order.firstIndex(of: current) ?? 0 }
+
+    mutating func reset(count: Int, start: Int, shuffle: Bool) {
+        current = start
+        order = Array(0..<count)
+        if shuffle { reshuffle() }
+    }
+
+    /// Перемешать всё, кроме текущего (он остаётся на своём месте — первым в новом порядке).
+    mutating func reshuffle() {
+        order = [current] + order.filter { $0 != current }.shuffled()
+    }
+
+    mutating func unshuffle() { order = order.sorted() }
+
+    /// Новый круг при перемешивании: полностью новый порядок, первым — не тот, что только что доиграл.
+    mutating func newShuffledRound() -> Int {
+        var o = order.shuffled()
+        if o.count > 1, o.first == current { o.swapAt(0, Int.random(in: 1..<o.count)) }
+        order = o
+        current = o.first ?? 0
+        return current
+    }
+
+    func next(repeatAll: Bool) -> Int? {
+        let p = position
+        if p + 1 < order.count { return order[p + 1] }
+        return repeatAll && !order.isEmpty ? order[0] : nil
+    }
+
+    func previous(repeatAll: Bool) -> Int? {
+        let p = position
+        if p > 0 { return order[p - 1] }
+        return repeatAll && !order.isEmpty ? order[order.count - 1] : nil
+    }
+
+    var isAtEnd: Bool { position == order.count - 1 }
+
+    mutating func move(to i: Int) { current = i }
+}
+
 // MARK: - Плеер
 
 /// Один плеер на всё приложение: мини-окно внизу и полноэкранное окно показывают один и тот же AVPlayer.
@@ -32,8 +86,23 @@ final class PlayerController {
     private(set) var entries: [PlayEntry] = []
     private(set) var index = 0
     var current: PlayEntry? { entries.indices.contains(index) ? entries[index] : nil }
-    var hasPrevious: Bool { index > 0 }
-    var hasNext: Bool { index + 1 < entries.count }
+    @ObservationIgnored private var queue = PlayQueue()
+    var hasPrevious: Bool { queue.previous(repeatAll: repeatMode == .all) != nil }
+    var hasNext: Bool { queue.next(repeatAll: repeatMode == .all) != nil }
+
+    /// Повтор: выключен (в конце списка остановиться), весь список по кругу, один трек.
+    var repeatMode: RepeatMode {
+        didSet { UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode") }
+    }
+    /// Случайный порядок.
+    var shuffle: Bool {
+        didSet {
+            UserDefaults.standard.set(shuffle, forKey: "shuffle")
+            if shuffle { queue.reshuffle() } else { queue.unshuffle() }
+        }
+    }
+
+    func cycleRepeat() { repeatMode = repeatMode.next }
 
     private(set) var isPlaying = false
     var currentTime: Double = 0
@@ -61,6 +130,8 @@ final class PlayerController {
     private(set) var palette: CoverColors = CoverPalette.colors(from: nil)
 
     private init() {
+        repeatMode = RepeatMode(rawValue: UserDefaults.standard.string(forKey: "repeatMode") ?? "") ?? .off
+        shuffle = UserDefaults.standard.bool(forKey: "shuffle")
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] t in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -76,6 +147,7 @@ final class PlayerController {
     func play(_ entries: [PlayEntry], startAt i: Int) {
         guard entries.indices.contains(i) else { return }
         self.entries = entries
+        queue.reset(count: entries.count, start: i, shuffle: shuffle)
         load(i)
     }
 
@@ -88,10 +160,32 @@ final class PlayerController {
         isPlaying = player.rate > 0
     }
 
-    func next() { if hasNext { load(index + 1) } }
+    func next() {
+        // Новый круг при перемешивании — новый случайный порядок.
+        if queue.isAtEnd && repeatMode == .all && shuffle {
+            load(queue.newShuffledRound())
+            return
+        }
+        guard let n = queue.next(repeatAll: repeatMode == .all) else { return }
+        load(n)
+    }
+
     func previous() {
         // Как в плеерах: если прошло больше 3 секунд — в начало текущего.
-        if currentTime > 3 || !hasPrevious { seek(to: 0) } else { load(index - 1) }
+        if currentTime > 3 || !hasPrevious { seek(to: 0) } else if let p = queue.previous(repeatAll: repeatMode == .all) { load(p) }
+    }
+
+    /// Трек доиграл до конца.
+    private func finished() {
+        if repeatMode == .one {
+            seek(to: 0)
+            player.play()
+            isPlaying = true
+        } else if hasNext {
+            next()
+        } else {
+            isPlaying = false   // повтор выключен — в конце списка останавливаемся
+        }
     }
 
     func seek(to seconds: Double) {
@@ -119,6 +213,7 @@ final class PlayerController {
 
     private func load(_ i: Int) {
         index = i
+        queue.move(to: i)
         error = nil
         currentTime = 0
         duration = 0
@@ -162,7 +257,7 @@ final class PlayerController {
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    if self.hasNext { self.next() } else { self.isPlaying = false }
+                    self.finished()
                 }
             }
             player.replaceCurrentItem(with: item)
@@ -302,12 +397,17 @@ struct PlayerControls: View {
             scrubber
             HStack(spacing: 18) {
                 Spacer()
+                ModeButton(icon: "shuffle", active: controller.shuffle, size: 12, dark: dark,
+                           help: controller.shuffle ? L.shuffleOn : L.shuffleOff) { controller.shuffle.toggle() }
                 button("backward.fill", L.previousItem, size: 14) { controller.previous() }
                 button(controller.isPlaying ? "pause.fill" : "play.fill",
                        controller.isPlaying ? L.pause : L.playWord, size: 20) { controller.togglePlay() }
                     .disabled(controller.preparing != nil)
                 button("forward.fill", L.nextItem, size: 14) { controller.next() }
                     .disabled(!controller.hasNext)
+                ModeButton(icon: controller.repeatMode == .one ? "repeat.1" : "repeat",
+                           active: controller.repeatMode != .off, size: 12, dark: dark,
+                           help: L.repeatHelp(controller.repeatMode)) { controller.cycleRepeat() }
                 Spacer()
                 if fullscreen {
                     button("arrow.down.right.and.arrow.up.left", L.exitFullscreen, size: 13) { controller.exitFullscreen() }
@@ -432,6 +532,54 @@ struct MiniPlayer: View {
     }
 }
 
+// MARK: - Кнопки режимов
+
+/// Перемешивание / повтор: подсвечена, когда режим включён.
+struct ModeButton: View {
+    let icon: String
+    let active: Bool
+    var size: CGFloat = 12
+    var dark = false
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: size, weight: active ? .bold : .regular))
+                .foregroundStyle(active ? Color.accentColor : (dark ? Color.white.opacity(0.55) : Color.secondary))
+                .frame(width: size + 16, height: size + 12)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(active ? 0.15 : 0)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// «Текст»: активна, только если текст песни нашёлся; открывает полный экран с текстом.
+struct LyricsButton: View {
+    @Bindable var controller: PlayerController
+    @Bindable private var lyrics = LyricsStore.shared
+
+    var body: some View {
+        let has = lyrics.status == .found
+        Button {
+            lyrics.visible = true
+            controller.openFullscreen()
+        } label: {
+            Image(systemName: has ? "quote.bubble.fill" : "quote.bubble")
+                .font(.system(size: 14))
+                .foregroundStyle(has ? Color.accentColor : Color.secondary.opacity(0.5))
+                .frame(width: 28, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!has)
+        .help(lyrics.status == .loading ? L.lyricsSearching : has ? L.showLyricsNow : L.lyricsNotFound)
+    }
+}
+
 // MARK: - Полоса плеера для музыки (в духе Apple Music)
 
 struct MusicPlayerBar: View {
@@ -479,12 +627,17 @@ struct MusicPlayerBar: View {
                 // Центр: кнопки и перемотка
                 VStack(spacing: 6) {
                     HStack(spacing: 26) {
+                        ModeButton(icon: "shuffle", active: controller.shuffle, size: 13,
+                                   help: controller.shuffle ? L.shuffleOn : L.shuffleOff) { controller.shuffle.toggle() }
                         barButton("backward.fill", L.previousItem, 17) { controller.previous() }
                         barButton(controller.isPlaying ? "pause.fill" : "play.fill",
                                   controller.isPlaying ? L.pause : L.playWord, 26) { controller.togglePlay() }
                             .disabled(controller.preparing != nil)
                         barButton("forward.fill", L.nextItem, 17) { controller.next() }
                             .disabled(!controller.hasNext)
+                        ModeButton(icon: controller.repeatMode == .one ? "repeat.1" : "repeat",
+                                   active: controller.repeatMode != .off, size: 13,
+                                   help: L.repeatHelp(controller.repeatMode)) { controller.cycleRepeat() }
                     }
                     if let p = controller.preparing {
                         HStack(spacing: 8) {
@@ -501,6 +654,7 @@ struct MusicPlayerBar: View {
 
                 // Справа: полный экран и закрыть
                 HStack(spacing: 14) {
+                    LyricsButton(controller: controller)
                     barButton("arrow.up.left.and.arrow.down.right", L.fullscreen, 14) { controller.openFullscreen() }
                     barButton("xmark", L.closePlayer, 13) { controller.close() }
                 }
