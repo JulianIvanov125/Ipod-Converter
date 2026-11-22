@@ -6,10 +6,9 @@ private let hairline = Theme.hairline
 
 /// Ширины колонок списка треков.
 private enum Col {
-    static let type: CGFloat = 150
+    static let type: CGFloat = 250
     static let bitrate: CGFloat = 78
     static let size: CGFloat = 70
-    static let target: CGFloat = 140
     static let rating: CGFloat = 74
     static let status: CGFloat = 112
 }
@@ -104,11 +103,16 @@ struct MusicSection: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 50)
-            sortHeader(L.colType, .type).frame(width: Col.type, alignment: .leading)
+            // «Тип → для iPod»: что сейчас и что получится после конвертации.
+            HStack(spacing: 4) {
+                sortHeader(L.colType, .type)
+                Text("→").foregroundStyle(.tertiary)
+                sortHeader(L.colFor(store.model.title), .target)
+            }
+            .frame(width: Col.type, alignment: .leading)
             sortHeader(L.colBitrate, .bitrate).frame(width: Col.bitrate, alignment: .trailing)
             sortHeader(L.size, .size).frame(width: Col.size, alignment: .trailing)
             sortHeader(L.colRating, .rating).frame(width: Col.rating, alignment: .leading)
-            sortHeader(L.colFor(store.model.title), .target).frame(width: Col.target, alignment: .leading)
             Color.clear.frame(width: Col.status, height: 1)
         }
         .font(.system(size: 10, weight: .semibold))
@@ -371,8 +375,6 @@ struct TrackRow: View {
     let onRate: (Int) -> Void
     @State private var confirmRemove = false
     @State private var showFormat = false
-    @State private var showFormatFromType = false
-    @State private var hoverType = false
     @State private var hoverArt = false
     @State private var hoverStar = 0
 
@@ -430,34 +432,10 @@ struct TrackRow: View {
             .help(track.url.path)
 
             if let info = track.info {
-                // Тип файла + ⚙︎: формат на выходе для этого трека.
-                Button { showFormatFromType.toggle() } label: {
-                    HStack(alignment: .center, spacing: 6) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(info.typeLabel)
-                                .font(.system(size: 10, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(RoundedRectangle(cornerRadius: 3).fill(Theme.tint(0.07)))
-                            Text(info.detailLabel)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Image(systemName: track.formatOverride != nil ? "gearshape.fill" : "gearshape")
-                            .font(.system(size: 12))
-                            .foregroundStyle(track.formatOverride != nil || hoverType ? Color.accentColor : Color.secondary)
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(hoverType ? Theme.tint(0.06) : Color.clear))
-                    .contentShape(Rectangle())
+                // Тип файла сейчас → формат после конвертации, ⚙︎ — формат именно этого трека.
+                TrackTargetButton(track: track, store: store, open: $showFormat) {
+                    typeTransition(track.plan(for: model) ?? .compatible, info: info)
                 }
-                .buttonStyle(.plain)
-                .onHover { hoverType = $0 }
-                .disabled(track.isActive)
-                .help(L.trackOutToggle)
-                .popover(isPresented: $showFormatFromType, arrowEdge: .bottom) { TrackFormatView(track: track, store: store) }
                 .frame(width: Col.type, alignment: .leading)
 
                 Text(info.bitrate.map { "\($0 / 1000) \(L.kbps)" } ?? "—")
@@ -470,12 +448,8 @@ struct TrackRow: View {
 
                 stars.frame(width: Col.rating, alignment: .leading)
 
-                TrackTargetButton(track: track, store: store, open: $showFormat) {
-                    targetBadge(track.plan(for: model) ?? .compatible, info: info)
-                }
-                    .frame(width: Col.target, alignment: .leading)
             } else {
-                Spacer().frame(width: Col.type + Col.bitrate + Col.size + Col.rating + Col.target + 40)
+                Spacer().frame(width: Col.type + Col.bitrate + Col.size + Col.rating + 30)
             }
 
             status.frame(width: Col.status, alignment: .trailing)
@@ -501,39 +475,53 @@ struct TrackRow: View {
         }
     }
 
+    /// «MP3 → AAC 256» и ниже «44.1 кГц → ≈ 8 МБ»; если файл и так подходит — «MP3 ✓ как есть».
     @ViewBuilder
-    private func targetBadge(_ plan: AudioPlan, info: AudioInfo) -> some View {
+    private func typeTransition(_ plan: AudioPlan, info: AudioInfo) -> some View {
         let est = Fmt.bytes(AudioRules.estimatedBytes(plan, info: info))
-        switch plan {
-        case .compatible:
-            Label(L.compatibleBadge, systemImage: "checkmark")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.green)
-                .help(L.compatibleHelp)
-        case .alac(let rate):
-            VStack(alignment: .leading, spacing: 1) {
-                Text("→ ALAC 16/\(Self.khz(rate))")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text("≈ \(est)").font(.system(size: 10)).foregroundStyle(.secondary)
+        let target: (name: String, detail: String, help: String)? = {
+            switch plan {
+            case .compatible: return nil
+            case .alac(let rate): return ("ALAC", "16/\(Self.khz(rate))", L.alacHelp)
+            case .mp3(let rate, let kbps): return ("MP3 \(kbps)", Self.khz(rate), L.trackOutToggle)
+            case .aac(let rate, let kbps): return ("AAC \(kbps)", Self.khz(rate), L.aacHelp)
             }
-            .help(L.alacHelp)
-        case .mp3(let rate, let kbps):
-            VStack(alignment: .leading, spacing: 1) {
-                Text("→ MP3 \(kbps) · \(Self.khz(rate))")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text("≈ \(est)").font(.system(size: 10)).foregroundStyle(.secondary)
+        }()
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text(info.typeLabel)
+                    .font(.system(size: 10, weight: .bold))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Theme.tint(0.07)))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                if let target {
+                    Text(target.name)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.accentColor.opacity(0.12)))
+                } else {
+                    Label(L.compatibleBadge, systemImage: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.green)
+                }
             }
-        case .aac(let rate, let kbps):
-            VStack(alignment: .leading, spacing: 1) {
-                Text("→ AAC \(kbps) · \(Self.khz(rate))")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text("≈ \(est)").font(.system(size: 10)).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text(info.detailLabel)
+                if let target {
+                    Text("→").foregroundStyle(.tertiary)
+                    Text("\(target.detail) · ≈ \(est)")
+                }
             }
-            .help(L.aacHelp)
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
+        .help(target?.help ?? L.compatibleHelp)
     }
 
     /// Статус поиска тегов: идёт поиск / дополнено из Apple Music / не нашлось.
