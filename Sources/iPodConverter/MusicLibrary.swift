@@ -54,8 +54,26 @@ enum MusicLibrary {
                         duplicate t to pl
                     end if
                 else
-                    set t to add f to pl
+                    -- «add» иногда ничего не возвращает (файл уже в медиатеке и т. п.) — тогда ищем трек сами.
+                    set t to missing value
+                    try
+                        set t to add f to pl
+                    end try
+                    if t is missing value and tName is not "" then
+                        delay 0.5
+                        try
+                            set t to item 1 of (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
+                            set pid to persistent ID of t
+                            if not (exists (some track of pl whose persistent ID is pid)) then
+                                duplicate t to pl
+                            end if
+                        end try
+                    end if
                 end if
+                if t is missing value then
+                    -- Не нашли — пропускаем только этот трек, остальные добавляются.
+                    set end of pids to ""
+                else
                 if asVideo then
                     try
                         set media kind of t to music video
@@ -72,6 +90,7 @@ enum MusicLibrary {
                     end try
                 end if
                 set end of pids to (persistent ID of t)
+                end if
             end tell
             set i to i + 6
         end repeat
