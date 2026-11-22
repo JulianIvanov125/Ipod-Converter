@@ -313,6 +313,15 @@ enum L {
           "iPod підключено, але модель не визначено — виберіть її вручну.",
           "iPod падключаны, але мадэль не вызначана — выберыце яе ўручную.")
     }
+    static var permTitle: String { t("An iPod is connected", "Подключён iPod", "Підключено iPod", "Падключаны iPod") }
+    static var permMessage: String {
+        t("Allow access to the iPod so the app can recognize its model and name and add its tab? macOS will ask for permission.",
+          "Разрешить доступ к iPod, чтобы приложение определило его модель и имя и добавило вкладку? macOS попросит подтвердить.",
+          "Дозволити доступ до iPod, щоб застосунок визначив його модель та ім'я й додав вкладку? macOS попросить підтвердити.",
+          "Дазволіць доступ да iPod, каб праграма вызначыла яго мадэль і імя і дадала ўкладку? macOS папросіць пацвердзіць.")
+    }
+    static var permAllow: String { t("Allow", "Разрешить", "Дозволити", "Дазволіць") }
+    static var permNotNow: String { t("Not now", "Не сейчас", "Не зараз", "Не цяпер") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

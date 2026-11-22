@@ -30,6 +30,11 @@ final class IPodDetector {
     private(set) var accessDenied = false
     /// По USB подключено устройство «iPod», но модель не распознана (nano 6 без видео, неизвестная модель).
     private(set) var unknownIPod = false
+    /// Подключили iPod (новый или переподключили), а доступа нет — спросить ещё раз своим окном.
+    var askPermission = false
+    /// Серийные номера iPod, которые были подключены при прошлом опросе.
+    @ObservationIgnored private var lastSerials: Set<String> = []
+    @ObservationIgnored private var didFirstScan = false
     /// Подключённые модели (без повторов, в порядке каталога).
     var connected: [IPodModel] { IPodModel.allCases.filter { m in devices.contains { $0.model == m } } }
 
@@ -56,6 +61,13 @@ final class IPodDetector {
     func refresh() {
         let denied = Self.volumeAccessDenied()
         if denied != accessDenied { accessDenied = denied }
+        // Новое подключение iPod при запрете доступа — предложить разрешить заново.
+        let serials = Set(Self.usbDevices().filter { Self.model(forUSB: $0.pid, modelNumbers: []) != nil }.map(\.serial))
+        // При запуске не спрашиваем (пользователь уже ответил) — только при подключении/смене iPod.
+        if denied && didFirstScan && !serials.subtracting(lastSerials).isEmpty { askPermission = true }
+        if serials.isEmpty { askPermission = false }
+        lastSerials = serials
+        didFirstScan = true
         let unknown = Self.hasUnrecognizedIPod()
         if unknown != unknownIPod { unknownIPod = unknown }
         let found = denied ? [] : Self.detect(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides())
@@ -65,6 +77,33 @@ final class IPodDetector {
         let now = Set(connected)
         for m in connected where !old.contains(m) { onConnect?(m) }
         for m in old where !now.contains(m) { onDisconnect?(m) }
+    }
+
+    // MARK: Повторный запрос доступа
+
+    /// macOS спрашивает о съёмных носителях только один раз. Сбрасываем прошлый отказ
+    /// только для этого приложения (tccutil reset SystemPolicyRemovableVolumes <bundle id>),
+    /// затем обращаемся к диску iPod — система показывает запрос снова.
+    func requestAccessAgain() {
+        askPermission = false
+        let bundleID = Bundle.main.bundleIdentifier ?? "local.ipodconverter"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+            p.arguments = ["reset", "SystemPolicyRemovableVolumes", bundleID]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            try? p.run()
+            p.waitUntilExit()
+            // Обращение к съёмным дискам вызывает системный запрос; ответ подхватит следующий опрос.
+            let keys: [URLResourceKey] = [.volumeIsRemovableKey, .volumeIsEjectableKey, .volumeIsInternalKey]
+            for v in FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? [] {
+                guard let r = try? v.resourceValues(forKeys: Set(keys)), r.volumeIsInternal != true,
+                      r.volumeIsRemovable == true || r.volumeIsEjectable == true else { continue }
+                _ = try? FileManager.default.contentsOfDirectory(atPath: v.path)
+            }
+            DispatchQueue.main.async { IPodDetector.shared.refresh() }
+        }
     }
 
     // MARK: Ручное уточнение модели (по серийному номеру устройства)

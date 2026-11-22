@@ -73,6 +73,14 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: PlayerController.shared.isFullscreen)
         .background(WindowBackground())
+        .alert(L.permTitle, isPresented: Binding(
+            get: { IPodDetector.shared.askPermission },
+            set: { if !$0 { IPodDetector.shared.askPermission = false } })) {
+            Button(L.permAllow) { IPodDetector.shared.requestAccessAgain() }
+            Button(L.permNotNow, role: .cancel) { IPodDetector.shared.askPermission = false }
+        } message: {
+            Text(L.permMessage)
+        }
         .foregroundStyle(ink)
         .dropDestination(for: URL.self) { urls, _ in
             guard store.hasIPod else { showCatalog = true; return false }
