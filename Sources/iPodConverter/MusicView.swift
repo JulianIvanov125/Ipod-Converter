@@ -29,7 +29,13 @@ struct MusicSection: View {
                 columnHeader
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        ForEach(store.tracks) { t in
+                        if store.visibleTracks.isEmpty {
+                            Text(L.searchNothing)
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 30)
+                        }
+                        ForEach(store.visibleTracks) { t in
                             TrackRow(
                                 track: t,
                                 model: store.model,
@@ -69,7 +75,7 @@ struct MusicSection: View {
             .fixedSize()
             .disabled(store.isMusicBusy)
 
-            let allChecked = store.tracks.allSatisfy(\.isChecked)
+            let allChecked = !store.visibleTracks.isEmpty && store.visibleTracks.allSatisfy(\.isChecked)
             Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllChecked(!allChecked) }
                 .buttonStyle(.link)
                 .font(.system(size: 12))
@@ -96,12 +102,18 @@ struct MusicSection: View {
     private var columnHeader: some View {
         HStack(spacing: 10) {
             Color.clear.frame(width: 18, height: 1)
-            Text(L.colTrack).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 50)
-            Text(L.colType).frame(width: Col.type, alignment: .leading)
-            Text(L.colBitrate).frame(width: Col.bitrate, alignment: .trailing)
-            Text(L.size).frame(width: Col.size, alignment: .trailing)
-            Text(L.colRating).frame(width: Col.rating, alignment: .leading)
-            Text(L.colFor(store.model.title)).frame(width: Col.target, alignment: .leading).lineLimit(1)
+            HStack(spacing: 10) {
+                sortHeader(L.colTrack, .title)
+                SearchBox(text: $store.trackSearch)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 50)
+            sortHeader(L.colType, .type).frame(width: Col.type, alignment: .leading)
+            sortHeader(L.colBitrate, .bitrate).frame(width: Col.bitrate, alignment: .trailing)
+            sortHeader(L.size, .size).frame(width: Col.size, alignment: .trailing)
+            sortHeader(L.colRating, .rating).frame(width: Col.rating, alignment: .leading)
+            sortHeader(L.colFor(store.model.title), .target).frame(width: Col.target, alignment: .leading)
             Color.clear.frame(width: Col.status, height: 1)
         }
         .font(.system(size: 10, weight: .semibold))
@@ -109,6 +121,26 @@ struct MusicSection: View {
         .textCase(.uppercase)
         .padding(.horizontal, 24 + 12)
         .padding(.bottom, 4)
+    }
+
+    /// Заголовок колонки: клик — по возрастанию, ещё клик — по убыванию, третий — как было.
+    private func sortHeader(_ title: String, _ key: TrackSortKey) -> some View {
+        let active = store.trackSort == key
+        return Button {
+            store.toggleSort(key)
+        } label: {
+            HStack(spacing: 3) {
+                Text(title).lineLimit(1)
+                if active {
+                    Image(systemName: store.sortAscending ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                }
+            }
+            .foregroundStyle(active ? Color.accentColor : Color.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(active ? (store.sortAscending ? L.sortDescHelp : L.sortResetHelp) : L.sortAscHelp)
     }
 
     private var footer: some View {
@@ -160,6 +192,33 @@ struct MusicSection: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
         .overlay(alignment: .top) { Rectangle().fill(hairline).frame(height: 1) }
+    }
+}
+
+/// Поле поиска рядом с колонкой «Трек».
+struct SearchBox: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass").font(.system(size: 10))
+            TextField(L.searchPlaceholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .textCase(nil)
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 7)
+        .frame(width: 190, height: 22)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.tint(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.tint(text.isEmpty ? 0.08 : 0.25)))
+        .foregroundStyle(.secondary)
+        .help(L.searchHelp)
     }
 }
 

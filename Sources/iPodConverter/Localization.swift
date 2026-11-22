@@ -182,6 +182,18 @@ enum L {
           """)
     }
     static func videosCount(_ n: Int) -> String { t("Videos: \(n)", "Видео: \(n)", "Відео: \(n)", "Відэа: \(n)") }
+    // Поиск и сортировка
+    static var searchPlaceholder: String { t("Search", "Поиск", "Пошук", "Пошук") }
+    static var searchHelp: String {
+        t("Title, artist, album or file name. Latin and Cyrillic are the same (kino = Кино), the wrong keyboard layout works too (rbyj = кино).",
+          "Название, артист, альбом или имя файла. Латиница и кириллица равны (kino = Кино), можно набирать и не в той раскладке (rbyj = кино).",
+          "Назва, виконавець, альбом або ім'я файлу. Латиниця й кирилиця рівні (kino = Кіно), можна набирати й не в тій розкладці (rbyj = кино).",
+          "Назва, выканаўца, альбом або імя файла. Лацінка і кірыліца роўныя (kino = Кіно), можна набіраць і не ў той раскладцы (rbyj = кино).")
+    }
+    static var searchNothing: String { t("Nothing found", "Ничего не найдено", "Нічого не знайдено", "Нічога не знойдзена") }
+    static var sortAscHelp: String { t("Sort ascending", "Сортировать по возрастанию", "Сортувати за зростанням", "Сартаваць па ўзрастанні") }
+    static var sortDescHelp: String { t("Sort descending", "Сортировать по убыванию", "Сортувати за спаданням", "Сартаваць па змяншэнні") }
+    static var sortResetHelp: String { t("Back to the original order", "Вернуть исходный порядок", "Повернути початковий порядок", "Вярнуць першапачатковы парадак") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

@@ -14,6 +14,18 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if args.contains("--selftest-search") {
+            let library: [(String, String)] = [("Кино", "Группа крови"), ("Виктор Цой", "Звезда по имени Солнце"),
+                ("Океан Ельзи", "Обійми"), ("Daft Punk", "Get Lucky"), ("Чайф", "Аргентина — Ямайка 5:0"),
+                ("Ляпис Трубецкой", "Капитал"), ("Mötley Crüe", "Kickstart My Heart"), ("Земфира", "Хочешь?")]
+            let queries = ["kino", "Кино", "rbyj", "tsoy", "coj", "okean elzy", "обійми", "obiimy", "chaif", "jamajka",
+                           "ляпис капитал", "lyapis", "motley crue", "мотли", "zemfira", "хочешь", "daft lucky", "дафт", "zzz"]
+            for q in queries {
+                let hits = library.filter { TrackSearch.matches(q, in: [$0.0, $0.1]) }.map { "\($0.0) — \($0.1)" }
+                print("«\(q)» → " + (hits.isEmpty ? "—" : hits.joined(separator: "; ")))
+            }
+            exit(0)
+        }
         if args.contains("--selftest-queue") {
             func run(_ title: String, start: Int, shuffle: Bool, repeatAll: Bool, steps: Int) {
                 var q = PlayQueue()

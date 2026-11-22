@@ -222,6 +222,49 @@ final class Store {
         didSet { UserDefaults.standard.set(section.rawValue, forKey: "section") }
     }
     var musicScope: MusicScope = .all
+    /// Поиск по трекам (латиница = кириллица, неверная раскладка).
+    var trackSearch = ""
+    /// Сортировка списка треков; nil — в порядке добавления.
+    var trackSort: TrackSortKey?
+    var sortAscending = true
+
+    /// Клик по заголовку: ↑ → ↓ → исходный порядок.
+    func toggleSort(_ key: TrackSortKey) {
+        if trackSort != key { trackSort = key; sortAscending = true }
+        else if sortAscending { sortAscending = false }
+        else { trackSort = nil; sortAscending = true }
+    }
+
+    /// То, что видно в списке: после поиска и сортировки. По нему же идут «следующий/предыдущий» в плеере.
+    var visibleTracks: [TrackItem] {
+        var list = tracks.filter { t in
+            TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent])
+        }
+        guard let key = trackSort else { return list }
+        let m = model
+        func planRank(_ t: TrackItem) -> Int {
+            switch t.plan(for: m) {
+            case .compatible: 0
+            case .alac: 1
+            case .aac: 2
+            case .mp3: 3
+            case nil: 4
+            }
+        }
+        list.sort { a, b in
+            let less: Bool
+            switch key {
+            case .title: less = a.displayTitle.localizedStandardCompare(b.displayTitle) == .orderedAscending
+            case .type: less = (a.info?.typeLabel ?? "", a.info?.codec ?? "") < (b.info?.typeLabel ?? "", b.info?.codec ?? "")
+            case .bitrate: less = (a.info?.bitrate ?? 0) < (b.info?.bitrate ?? 0)
+            case .size: less = (a.info?.fileSize ?? 0) < (b.info?.fileSize ?? 0)
+            case .rating: less = a.rating < b.rating
+            case .target: less = planRank(a) < planRank(b)
+            }
+            return sortAscending ? less : !less && !(a === b)
+        }
+        return list
+    }
     /// Итог последней пачки треков (для строки состояния внизу).
     var musicBatchStatus: (text: String, ok: Bool)?
 
@@ -442,7 +485,7 @@ final class Store {
     }
 
     func playTrack(_ track: TrackItem, converted: Bool) {
-        let list: [(TrackItem, URL)] = tracks.compactMap { t in
+        let list: [(TrackItem, URL)] = visibleTracks.compactMap { t in
             if converted {
                 switch t.state {
                 case .done(let out): return (t, out)
@@ -586,9 +629,10 @@ final class Store {
         if value { musicScope = .selected }
     }
 
+    /// Отметить/снять видимые треки (с учётом поиска).
     func setAllChecked(_ value: Bool) {
         if value { musicScope = .selected }
-        for t in tracks { t.isChecked = value }
+        for t in visibleTracks { t.isChecked = value }
     }
 
     func openMusicFolder() {
