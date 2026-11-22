@@ -1,0 +1,374 @@
+import Foundation
+import Observation
+
+/// Язык интерфейса. «Как в системе»: ru/uk/be берём из системы, любой другой язык → английский.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, en, ru, uk, be
+
+    var id: String { rawValue }
+
+    /// Название языка на нём самом.
+    var nativeName: String {
+        switch self {
+        case .system: L.t("System", "Как в системе", "Як у системі", "Як у сістэме")
+        case .en: "English"
+        case .ru: "Русский"
+        case .uk: "Українська"
+        case .be: "Беларуская"
+        }
+    }
+
+    static func fromSystem() -> AppLanguage {
+        for id in Locale.preferredLanguages {
+            switch String(id.prefix(2)) {
+            case "ru": return .ru
+            case "uk": return .uk
+            case "be": return .be
+            case "en": return .en
+            default: continue
+            }
+        }
+        return .en
+    }
+}
+
+@Observable
+final class LanguageSettings {
+    static let shared = LanguageSettings()
+
+    var choice: AppLanguage {
+        didSet { UserDefaults.standard.set(choice.rawValue, forKey: "language") }
+    }
+
+    /// Фактический язык (без «system»).
+    var current: AppLanguage { choice == .system ? AppLanguage.fromSystem() : choice }
+
+    private init() {
+        choice = AppLanguage(rawValue: UserDefaults.standard.string(forKey: "language") ?? "") ?? .system
+    }
+}
+
+/// Все строки интерфейса: английский, русский, украинский, белорусский.
+enum L {
+    static func t(_ en: String, _ ru: String, _ uk: String, _ be: String) -> String {
+        switch LanguageSettings.shared.current {
+        case .ru: ru
+        case .uk: uk
+        case .be: be
+        default: en
+        }
+    }
+
+    // Шапка
+    static var whichIPod: String { t("Convert for which iPod", "Под какой iPod конвертируем", "Під який iPod конвертуємо", "Пад які iPod канвертуем") }
+    static var waitForConversion: String { t("Wait until the conversion finishes", "Дождитесь окончания конвертации", "Дочекайтеся завершення конвертації", "Дачакайцеся заканчэння канвертацыі") }
+    static var catalogHelp: String { t("All iPods — star the ones you own", "Все iPod — отметьте свои звёздочкой", "Усі iPod — позначте свої зірочкою", "Усе iPod — адзначце свае зорачкай") }
+    static var standard: String { t("Standard", "Стандарт", "Стандарт", "Стандарт") }
+    static var maximum: String { t("Maximum", "Максимум", "Максимум", "Максімум") }
+    static func maxHelp(_ mbps: String) -> String {
+        t("Maximum: H.264 640×480 up to \(mbps) Mbps — sharper picture and good for TV out, but a bigger file. If the iPod rejects the file, update its firmware or switch back to Standard.",
+          "Максимум: H.264 640×480 до \(mbps) Мбит/с — картинка резче и годится для вывода на ТВ, но файл больше. Если iPod не примет файл — обновите прошивку или верните «Стандарт».",
+          "Максимум: H.264 640×480 до \(mbps) Мбіт/с — картинка чіткіша й годиться для виводу на ТБ, але файл більший. Якщо iPod не прийме файл — оновіть прошивку або поверніть «Стандарт».",
+          "Максімум: H.264 640×480 да \(mbps) Мбіт/с — карцінка больш выразная і падыходзіць для вываду на ТБ, але файл большы. Калі iPod не прыме файл — абнавіце прашыўку або вярніце «Стандарт».")
+    }
+    static var appearance: String { t("Appearance", "Оформление", "Вигляд", "Выгляд") }
+    static var language: String { t("Language", "Язык", "Мова", "Мова") }
+
+    // Низ окна
+    static var add: String { t("Add", "Добавить", "Додати", "Дадаць") }
+    static var openOutputFolder: String { t("Open the folder with converted files", "Открыть папку с готовыми файлами", "Відкрити теку з готовими файлами", "Адкрыць папку з гатовымі файламі") }
+    static func toMusic(_ playlist: String) -> String {
+        t("Add to Music → playlist “\(playlist)”", "В «Музыку» → плейлист «\(playlist)»", "У «Музику» → плейлист «\(playlist)»", "У «Музыку» → плэйліст «\(playlist)»")
+    }
+    static var toMusicHelp: String {
+        t("After conversion the file goes into the Music app, into the selected iPod's playlist. In Finder, set each iPod to sync only its own playlist.",
+          "После конвертации файл попадёт в Music.app в плейлист выбранного iPod. В Finder для каждого iPod включите синхронизацию только его плейлиста.",
+          "Після конвертації файл потрапить у Music.app у плейлист вибраного iPod. У Finder для кожного iPod увімкніть синхронізацію лише його плейлиста.",
+          "Пасля канвертацыі файл трапіць у Music.app у плэйліст выбранага iPod. У Finder для кожнага iPod уключыце сінхранізацыю толькі яго плэйліста.")
+    }
+    static var convertAll: String { t("Convert all", "Конвертировать все", "Конвертувати все", "Канвертаваць усё") }
+
+    // Список моделей
+    static var allIPods: String { t("All iPods with video", "Все iPod с видео", "Усі iPod з відео", "Усе iPod з відэа") }
+    static var starredAppear: String { t("Starred models appear as tabs", "Отмеченные звёздочкой появятся во вкладках", "Позначені зірочкою з'являться у вкладках", "Адзначаныя зорачкай з'явяцца ва ўкладках") }
+    static var upTo640: String { t("(up to 640×480)", "(до 640×480)", "(до 640×480)", "(да 640×480)") }
+    static var keepOne: String { t("At least one iPod must stay in the tabs", "Хотя бы один iPod должен остаться во вкладках", "Хоча б один iPod має залишитися у вкладках", "Хаця б адзін iPod павінен застацца ва ўкладках") }
+
+    // Пустой экран
+    static var dropHere: String { t("Drop a video here", "Перетащите видео сюда", "Перетягніть відео сюди", "Перацягніце відэа сюды") }
+    static var orClick: String {
+        t("or click to choose a file · MP4, MOV, MKV, AVI…", "или нажмите, чтобы выбрать файл · MP4, MOV, MKV, AVI…",
+          "або натисніть, щоб вибрати файл · MP4, MOV, MKV, AVI…", "або націсніце, каб выбраць файл · MP4, MOV, MKV, AVI…")
+    }
+
+    // Карточка
+    static var readingInfo: String { t("Reading file info…", "Читаю информацию о файле…", "Читаю інформацію про файл…", "Чытаю інфармацыю пра файл…") }
+    static var unknownArtist: String { t("Unknown artist", "Артист не указан", "Виконавця не вказано", "Выканаўца не пазначаны") }
+    static var removeFromList: String { t("Remove from list", "Убрать из списка", "Прибрати зі списку", "Прыбраць са спісу") }
+    static var now: String { t("Now", "Сейчас", "Зараз", "Цяпер") }
+    static var after: String { t("After", "После", "Після", "Пасля") }
+    static var resolution: String { t("Resolution", "Разрешение", "Роздільність", "Раздзяляльнасць") }
+    static var quality: String { t("Quality", "Качество", "Якість", "Якасць") }
+    static var size: String { t("Size", "Размер", "Розмір", "Памер") }
+    static var duration: String { t("Duration", "Длительность", "Тривалість", "Працягласць") }
+    static var format: String { t("Format", "Формат", "Формат", "Фармат") }
+    static var noAudio: String { t("no audio", "без звука", "без звуку", "без гуку") }
+    static var kbps: String { t("kbps", "кбит/с", "кбіт/с", "кбіт/с") }
+    static var mbps: String { t("Mbps", "Мбит/с", "Мбіт/с", "Мбіт/с") }
+    static var kHz: String { t("kHz", "кГц", "кГц", "кГц") }
+    static var readyToConvert: String { t("Ready to convert", "Готово к конвертации", "Готово до конвертації", "Гатова да канвертацыі") }
+    static var stop: String { t("Stop", "Остановить", "Зупинити", "Спыніць") }
+    static func convertedFor(_ m: String) -> String { t("Converted for \(m)", "Отконвертировано для \(m)", "Сконвертовано для \(m)", "Канвертавана для \(m)") }
+    static var convertAgain: String { t("Convert again (for the selected iPod)", "Конвертировать ещё раз (под выбранный iPod)", "Конвертувати ще раз (під вибраний iPod)", "Канвертаваць яшчэ раз (пад выбраны iPod)") }
+    static var convert: String { t("Convert", "Конвертировать", "Конвертувати", "Канвертаваць") }
+    static var showOriginalInFinder: String { t("Show original in Finder", "Показать оригинал в Finder", "Показати оригінал у Finder", "Паказаць арыгінал у Finder") }
+    static var showResultInFinder: String { t("Show converted file in Finder", "Показать готовый файл в Finder", "Показати готовий файл у Finder", "Паказаць гатовы файл у Finder") }
+    static var showInFinder: String { t("Show in Finder", "Показать в Finder", "Показати у Finder", "Паказаць у Finder") }
+    static var fileAppearsLater: String { t("The file will appear after conversion", "Файл появится после конвертации", "Файл з'явиться після конвертації", "Файл з'явіцца пасля канвертацыі") }
+
+    // Подтверждение удаления во время конвертации
+    static var areYouSure: String { t("Are you sure?", "Вы точно уверены?", "Ви точно впевнені?", "Вы сапраўды ўпэўненыя?") }
+    static var removeWhileConverting: String {
+        t("This video is converting right now. The conversion will stop and the unfinished file will be deleted.",
+          "Это видео сейчас конвертируется. Конвертация остановится, а недоделанный файл удалится.",
+          "Це відео зараз конвертується. Конвертацію буде зупинено, а незавершений файл видалено.",
+          "Гэта відэа зараз канвертуецца. Канвертацыя спыніцца, а незавершаны файл будзе выдалены.")
+    }
+    static var stopAndRemove: String { t("Stop and remove", "Остановить и удалить", "Зупинити й видалити", "Спыніць і выдаліць") }
+    static var removeTab: String { t("Remove tab", "Убрать вкладку", "Прибрати вкладку", "Прыбраць укладку") }
+    static var stopAndRemoveTab: String { t("Stop and remove tab", "Остановить и убрать", "Зупинити й прибрати", "Спыніць і прыбраць") }
+    static func removeTabWhileConverting(_ m: String) -> String {
+        t("Converting for \(m) right now. The conversion will stop and unfinished files will be deleted.",
+          "Сейчас идёт конвертация под \(m). Она остановится, а недоделанные файлы удалятся.",
+          "Зараз триває конвертація під \(m). Її буде зупинено, а незавершені файли видалено.",
+          "Зараз ідзе канвертацыя пад \(m). Яна спыніцца, а незавершаныя файлы будуць выдалены.")
+    }
+    // Разделы и музыка
+    static var sectionMusic: String { t("Music", "Музыка", "Музика", "Музыка") }
+    static var sectionVideos: String { t("Videos", "Видео", "Відео", "Відэа") }
+    static func scopeAll(_ n: Int) -> String { t("All tracks (\(n))", "Все треки (\(n))", "Усі треки (\(n))", "Усе трэкі (\(n))") }
+    static func scopeSelected(_ n: Int) -> String { t("Selected (\(n))", "Выбранные (\(n))", "Вибрані (\(n))", "Выбраныя (\(n))") }
+    static var checkAll: String { t("Select all", "Выбрать все", "Вибрати всі", "Выбраць усе") }
+    static var uncheckAll: String { t("Deselect all", "Снять все", "Зняти всі", "Зняць усе") }
+    static var checkedIgnored: String {
+        t("“All tracks” is on — checkmarks are ignored", "Включено «Все треки» — отметки не учитываются",
+          "Увімкнено «Усі треки» — позначки не враховуються", "Уключана «Усе трэкі» — адзнакі не ўлічваюцца")
+    }
+    static var formatLabel: String { t("Format:", "Формат:", "Формат:", "Фармат:") }
+    static var formatHelp: String {
+        t("""
+          What you get for the iPod.
+          Auto — files that already play are copied as is; lossless → Apple Lossless; the rest → AAC 256.
+          AAC / MP3 — everything at the chosen bitrate (saves space). Files already in that format at the same or lower bitrate are copied without re-encoding.
+          Apple Lossless — lossless sources → ALAC 16-bit. Lossy files (MP3, AAC…) can't become lossless, so they stay as they are.
+          """,
+          """
+          Что получится для iPod.
+          Авто — то, что уже играет, копируется как есть; lossless → Apple Lossless; остальное → AAC 256.
+          AAC / MP3 — всё в выбранном битрейте (экономит место). Файлы, уже в этом формате с таким же или меньшим битрейтом, копируются без пережатия.
+          Apple Lossless — lossless-исходники → ALAC 16 бит. Из lossy (MP3, AAC…) lossless не сделать, они остаются как есть.
+          """,
+          """
+          Що вийде для iPod.
+          Авто — те, що вже грає, копіюється як є; lossless → Apple Lossless; решта → AAC 256.
+          AAC / MP3 — усе у вибраному бітрейті (економить місце). Файли, що вже в цьому форматі з таким самим або меншим бітрейтом, копіюються без перетискання.
+          Apple Lossless — lossless-джерела → ALAC 16 біт. З lossy (MP3, AAC…) lossless не зробити, вони лишаються як є.
+          """,
+          """
+          Што атрымаецца для iPod.
+          Аўта — тое, што ўжо грае, капіюецца як ёсць; lossless → Apple Lossless; астатняе → AAC 256.
+          AAC / MP3 — усё ў выбраным бітрэйце (эканоміць месца). Файлы, што ўжо ў гэтым фармаце з такім жа ці меншым бітрэйтам, капіююцца без перацісквання.
+          Apple Lossless — lossless-крыніцы → ALAC 16 біт. З lossy (MP3, AAC…) lossless не зрабіць, яны застаюцца як ёсць.
+          """)
+    }
+    static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
+    static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
+    static var colType: String { t("Type", "Тип", "Тип", "Тып") }
+    static var colBitrate: String { t("Bitrate", "Битрейт", "Бітрейт", "Бітрэйт") }
+    static func colFor(_ m: String) -> String { t("For \(m)", "Для \(m)", "Для \(m)", "Для \(m)") }
+    static var compatibleBadge: String { t("Fits as is", "Подходит", "Підходить", "Падыходзіць") }
+    static var compatibleHelp: String {
+        t("This format already plays on the selected iPod — the file is copied to the folder as is, without re-encoding (no quality loss).",
+          "Этот формат уже играет на выбранном iPod — файл копируется в папку как есть, без перекодирования (качество не теряется).",
+          "Цей формат уже грає на вибраному iPod — файл копіюється в теку як є, без перекодування (якість не втрачається).",
+          "Гэты фармат ужо грае на выбраным iPod — файл капіюецца ў папку як ёсць, без перакадавання (якасць не губляецца).")
+    }
+    static var alacHelp: String {
+        t("Lossless source → Apple Lossless, 16-bit, up to 48 kHz: no quality loss within what the iPod can play.",
+          "Lossless-исходник → Apple Lossless, 16 бит, до 48 кГц: без потерь в пределах того, что играет iPod.",
+          "Lossless-джерело → Apple Lossless, 16 біт, до 48 кГц: без втрат у межах того, що грає iPod.",
+          "Lossless-крыніца → Apple Lossless, 16 біт, да 48 кГц: без страт у межах таго, што грае iPod.")
+    }
+    static var aacHelp: String {
+        t("Format the iPod can't play → AAC 256 kbps (Apple encoder).",
+          "Формат, который iPod не играет → AAC 256 кбит/с (кодер Apple).",
+          "Формат, який iPod не грає → AAC 256 кбіт/с (кодер Apple).",
+          "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
+    }
+    static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var dropTracks: String { t("Drop tracks or a folder here", "Перетащите треки или папку сюда", "Перетягніть треки або теку сюди", "Перацягніце трэкі або папку сюды") }
+    static var orClickTracks: String {
+        t("or click to choose · FLAC, OGG, Opus, WMA, APE, MP3…", "или нажмите, чтобы выбрать · FLAC, OGG, Opus, WMA, APE, MP3…",
+          "або натисніть, щоб вибрати · FLAC, OGG, Opus, WMA, APE, MP3…", "або націсніце, каб выбраць · FLAC, OGG, Opus, WMA, APE, MP3…")
+    }
+    static func convertN(_ n: Int) -> String { t("Convert (\(n))", "Конвертировать (\(n))", "Конвертувати (\(n))", "Канвертаваць (\(n))") }
+    static var notAudio: String { t("No audio track in the file", "В файле нет звуковой дорожки", "У файлі немає звукової доріжки", "У файле няма гукавой дарожкі") }
+    static var chooseTracks: String { t("Choose tracks or folders to convert", "Выберите треки или папки для конвертации", "Виберіть треки або теки для конвертації", "Выберыце трэкі або папкі для канвертацыі") }
+    static func musicReady(_ m: String) -> String { t("Music ready for \(m)", "Музыка готова для \(m)", "Музика готова для \(m)", "Музыка гатова для \(m)") }
+    static func musicSummary(converted: Int, kept: Int, failed: Int) -> String {
+        var s = t("Converted: \(converted) · copied as is: \(kept)", "Сконвертировано: \(converted) · скопировано как есть: \(kept)",
+                  "Сконвертовано: \(converted) · скопійовано як є: \(kept)", "Канвертавана: \(converted) · скапіявана як ёсць: \(kept)")
+        if failed > 0 { s += t(" · errors: \(failed)", " · ошибок: \(failed)", " · помилок: \(failed)", " · памылак: \(failed)") }
+        return s
+    }
+    static var trackRemoveWhileConverting: String {
+        t("This track is converting right now. The conversion will stop and the unfinished file will be deleted.",
+          "Этот трек сейчас конвертируется. Конвертация остановится, а недоделанный файл удалится.",
+          "Цей трек зараз конвертується. Конвертацію буде зупинено, а незавершений файл видалено.",
+          "Гэты трэк зараз канвертуецца. Канвертацыя спыніцца, а незавершаны файл будзе выдалены.")
+    }
+
+    // Папки, категории, TV
+    static var chooseRootMessage: String {
+        t("Where to save? “iPod Converter Music” and “iPod Converter Video” (with Music Videos, Films, Serials) will be created here.",
+          "Куда сохранить? Здесь будут созданы «iPod Converter Music» и «iPod Converter Video» (в ней Music Videos, Films, Serials).",
+          "Куди зберегти? Тут буде створено «iPod Converter Music» та «iPod Converter Video» (у ній Music Videos, Films, Serials).",
+          "Куды захаваць? Тут будуць створаны «iPod Converter Music» і «iPod Converter Video» (у ёй Music Videos, Films, Serials).")
+    }
+    static var categoryHelp: String {
+        t("Category decides the folder and how the iPod lists the video. Detected automatically — fix it if it's wrong.",
+          "Категория определяет папку и раздел на iPod. Определяется автоматически — поправьте, если ошиблась.",
+          "Категорія визначає теку й розділ на iPod. Визначається автоматично — виправте, якщо помилилась.",
+          "Катэгорыя вызначае папку і раздзел на iPod. Вызначаецца аўтаматычна — выпраўце, калі памылілася.")
+    }
+    static var showField: String { t("Show", "Сериал", "Серіал", "Серыял") }
+    static var seasonField: String { t("Season", "Сезон", "Сезон", "Сезон") }
+    static var episodeField: String { t("Episode", "Серия", "Серія", "Серыя") }
+    static var episodeTitleField: String { t("Episode title", "Название серии", "Назва серії", "Назва серыі") }
+    static var titleField: String { t("Title", "Название", "Назва", "Назва") }
+    static var yearField: String { t("Year", "Год", "Рік", "Год") }
+    static var artistField: String { t("Artist", "Артист", "Виконавець", "Выканаўца") }
+    static func toLibrary(_ playlist: String) -> String {
+        t("Add to Music/TV → playlist “\(playlist)”", "В «Музыку»/TV → плейлист «\(playlist)»",
+          "У «Музику»/TV → плейлист «\(playlist)»", "У «Музыку»/TV → плэйліст «\(playlist)»")
+    }
+    static var toLibraryHelp: String {
+        t("Music videos go to Music, films and series go to the TV app — into the selected iPod's playlist. In Finder, sync each iPod with its own playlist (Movies and TV Shows tabs).",
+          "Клипы попадут в «Музыку», фильмы и сериалы — в приложение TV, в плейлист выбранного iPod. В Finder синхронизируйте каждый iPod с его плейлистом (вкладки «Фильмы» и «Телешоу»).",
+          "Кліпи потраплять у «Музику», фільми й серіали — у застосунок TV, у плейлист вибраного iPod. У Finder синхронізуйте кожен iPod з його плейлистом (вкладки «Фільми» та «Телешоу»).",
+          "Кліпы трапяць у «Музыку», фільмы і серыялы — у праграму TV, у плэйліст выбранага iPod. У Finder сінхранізуйце кожны iPod з яго плэйлістам (укладкі «Фільмы» і «Тэлешоу»).")
+    }
+    static var musicApp: String { t("Music", "Музыка", "Музика", "Музыка") }
+    static var tvApp: String { "TV" }
+    static var addingToTV: String { t("Adding to TV…", "Добавляю в TV…", "Додаю в TV…", "Дадаю ў TV…") }
+    static func inTV(_ p: String) -> String { t("In TV, playlist “\(p)”", "В TV, плейлист «\(p)»", "У TV, плейлист «\(p)»", "У TV, плэйліст «\(p)»") }
+    static func noAppAccess(_ app: String) -> String {
+        t("No access to \(app): System Settings → Privacy & Security → Automation",
+          "Нет доступа к «\(app)»: Системные настройки → Конфиденциальность → Автоматизация",
+          "Немає доступу до «\(app)»: Системні параметри → Приватність і безпека → Автоматизація",
+          "Няма доступу да «\(app)»: Сістэмныя налады → Прыватнасць і бяспека → Аўтаматызацыя")
+    }
+    static func cantAddTo(_ app: String) -> String { t("Couldn't add to \(app): ", "Не удалось добавить в «\(app)»: ", "Не вдалося додати в «\(app)»: ", "Не ўдалося дадаць у «\(app)»: ") }
+
+    // Плеер
+    static var original: String { t("Original", "Оригинал", "Оригінал", "Арыгінал") }
+    static var convertedShort: String { t("Converted", "После конвертации", "Після конвертації", "Пасля канвертацыі") }
+    static var previewOriginal: String { t("Play original", "Просмотреть оригинал", "Переглянути оригінал", "Праглядзець арыгінал") }
+    static var watchResult: String { t("Watch result", "Смотреть результат", "Дивитися результат", "Глядзець вынік") }
+    static var listenResult: String { t("Listen to result", "Слушать результат", "Слухати результат", "Слухаць вынік") }
+    static var preparingPreview: String { t("Preparing preview…", "Готовлю превью…", "Готую прев'ю…", "Рыхтую прэв'ю…") }
+    static var previewFailed: String { t("Can't play this file", "Не получается воспроизвести файл", "Не вдається відтворити файл", "Не атрымліваецца прайграць файл") }
+    static var previousItem: String { t("Previous", "Предыдущее", "Попереднє", "Папярэдняе") }
+    static var nextItem: String { t("Next", "Следующее", "Наступне", "Наступнае") }
+    static var pause: String { t("Pause", "Пауза", "Пауза", "Паўза") }
+    static var playWord: String { t("Play", "Воспроизвести", "Відтворити", "Прайграць") }
+    static var fullscreen: String { t("Full screen", "На весь экран", "На весь екран", "На ўвесь экран") }
+    static var exitFullscreen: String { t("Exit full screen", "Выйти из полноэкранного режима", "Вийти з повноекранного режиму", "Выйсці з поўнаэкраннага рэжыму") }
+    static var closePlayer: String { t("Close player", "Закрыть плеер", "Закрити плеєр", "Закрыць плэер") }
+
+    // Оценки
+    static var colRating: String { t("Rating", "Оценка", "Оцінка", "Ацэнка") }
+    static var ratingHelp: String {
+        t("Rating from the file. It goes to Music together with the track and syncs to the iPod. Click the same star again to clear it.",
+          "Оценка из файла. Уйдёт в «Музыку» вместе с треком и синхронизируется на iPod. Повторный клик по той же звезде снимает оценку.",
+          "Оцінка з файлу. Піде в «Музику» разом із треком і синхронізується на iPod. Повторний клік по тій самій зірці знімає оцінку.",
+          "Ацэнка з файла. Пойдзе ў «Музыку» разам з трэкам і сінхранізуецца на iPod. Паўторны клік па той жа зорцы здымае ацэнку.")
+    }
+    static var ratingSyncedHelp: String {
+        t("The track is already in Music — changing the rating here changes it there too.",
+          "Трек уже в «Музыке» — оценка меняется и там.",
+          "Трек уже в «Музиці» — оцінка змінюється і там.",
+          "Трэк ужо ў «Музыцы» — ацэнка змяняецца і там.")
+    }
+
+    // Текст песни
+    static var showLyrics: String { t("Show lyrics", "Показывать текст песни", "Показувати текст пісні", "Паказваць тэкст песні") }
+    static var lyricsOnline: String { t("Search online (lrclib.net)", "Искать в интернете (lrclib.net)", "Шукати в інтернеті (lrclib.net)", "Шукаць у інтэрнэце (lrclib.net)") }
+    static var lyricsOnlineHelp: String {
+        t("Lyrics are taken from a .lrc file next to the track, then from the file's tags, then from lrclib.net — only artist, title, album and duration are sent there.",
+          "Текст берётся из файла .lrc рядом с треком, затем из тегов файла, затем с lrclib.net — туда уходят только артист, название, альбом и длительность.",
+          "Текст береться з файлу .lrc поруч із треком, потім із тегів файлу, потім з lrclib.net — туди йдуть лише виконавець, назва, альбом і тривалість.",
+          "Тэкст бярэцца з файла .lrc побач з трэкам, потым з тэгаў файла, потым з lrclib.net — туды ідуць толькі выканаўца, назва, альбом і працягласць.")
+    }
+    static var lyricsSource: String { t("Source", "Источник", "Джерело", "Крыніца") }
+    static var lyricsFromFile: String { t("file tags", "теги файла", "теги файлу", "тэгі файла") }
+    static var lyricsSearching: String { t("Looking for lyrics…", "Ищу текст песни…", "Шукаю текст пісні…", "Шукаю тэкст песні…") }
+    static var lyricsNotFound: String { t("Lyrics not found", "Текст не найден", "Текст не знайдено", "Тэкст не знойдзены") }
+    static var lyricsNotFoundOffline: String {
+        t("No lyrics in the file. Online search is off.", "В файле текста нет. Поиск в интернете выключен.",
+          "У файлі тексту немає. Пошук в інтернеті вимкнено.", "У файле тэксту няма. Пошук у інтэрнэце выключаны.")
+    }
+    static var lyricsNotSynced: String { t("Lyrics without timing", "Текст без синхронизации", "Текст без синхронізації", "Тэкст без сінхранізацыі") }
+
+    static var cancel: String { t("Cancel", "Отмена", "Скасувати", "Скасаваць") }
+
+    // Уведомления и «Музыка»
+    static func videoReady(_ m: String) -> String { t("Video ready for \(m)", "Видео готово для \(m)", "Відео готове для \(m)", "Відэа гатова для \(m)") }
+    static func convertedBody(_ title: String, folder: String) -> String {
+        t("“\(title)” has been converted and is in the “\(folder)” folder.",
+          "«\(title)» отконвертировано и лежит в папке «\(folder)».",
+          "«\(title)» сконвертовано, файл лежить у теці «\(folder)».",
+          "«\(title)» канвертавана, файл ляжыць у папцы «\(folder)».")
+    }
+    static var changeFolder: String { t("Change…", "Изменить…", "Змінити…", "Змяніць…") }
+    static var resetFolder: String { t("Back to the default folder", "Вернуть папку по умолчанию", "Повернути типову теку", "Вярнуць папку па змаўчанні") }
+    static var chooseFolderMessage: String { t("Choose where to save converted files", "Выберите, куда сохранять готовые файлы", "Виберіть, куди зберігати готові файли", "Выберыце, куды захоўваць гатовыя файлы") }
+    static var chooseButton: String { t("Choose", "Выбрать", "Вибрати", "Выбраць") }
+    static var saveTo: String { t("Save to", "Сохранять в", "Зберігати в", "Захоўваць у") }
+    static var folderMissing: String { t("Folder not found — it will be created, or choose another one", "Папки нет — она будет создана, или выберите другую", "Теки немає — її буде створено, або виберіть іншу", "Папкі няма — яна будзе створана, або выберыце іншую") }
+    static var addingToMusic: String { t("Adding to Music…", "Добавляю в «Музыку»…", "Додаю в «Музику»…", "Дадаю ў «Музыку»…") }
+    static func inMusic(_ p: String) -> String { t("In Music, playlist “\(p)”", "В «Музыке», плейлист «\(p)»", "У «Музиці», плейлист «\(p)»", "У «Музыцы», плэйліст «\(p)»") }
+    static func addedBody(_ title: String, _ p: String) -> String {
+        t("“\(title)” was added to the “\(p)” playlist — connect your iPod to sync.",
+          "«\(title)» добавлено в плейлист «\(p)» — подключите iPod для синхронизации.",
+          "«\(title)» додано в плейлист «\(p)» — підключіть iPod для синхронізації.",
+          "«\(title)» дададзена ў плэйліст «\(p)» — падключыце iPod для сінхранізацыі.")
+    }
+    static func notAddedBody(_ e: String) -> String {
+        t("The file is ready but wasn't added to Music: \(e)", "Файл готов, но в «Музыку» не добавлен: \(e)",
+          "Файл готовий, але в «Музику» не доданий: \(e)", "Файл гатовы, але ў «Музыку» не дададзены: \(e)")
+    }
+    static var noMusicAccess: String {
+        t("No access to Music: System Settings → Privacy & Security → Automation",
+          "Нет доступа к «Музыке»: Системные настройки → Конфиденциальность → Автоматизация",
+          "Немає доступу до «Музики»: Системні параметри → Приватність і безпека → Автоматизація",
+          "Няма доступу да «Музыкі»: Сістэмныя налады → Прыватнасць і бяспека → Аўтаматызацыя")
+    }
+    static var cantAddToMusic: String { t("Couldn't add to Music: ", "Не удалось добавить в «Музыку»: ", "Не вдалося додати в «Музику»: ", "Не ўдалося дадаць у «Музыку»: ") }
+    static var chooseVideos: String { t("Choose videos to convert", "Выберите видео для конвертации", "Виберіть відео для конвертації", "Выберыце відэа для канвертацыі") }
+    static var openVideo: String { t("Open Video…", "Открыть видео…", "Відкрити відео…", "Адкрыць відэа…") }
+
+    // Ошибки
+    static func toolNotFound(_ tool: String) -> String {
+        t("\(tool) not found. Install it: brew install ffmpeg", "Не найден \(tool). Установите: brew install ffmpeg",
+          "Не знайдено \(tool). Встановіть: brew install ffmpeg", "Не знойдзены \(tool). Усталюйце: brew install ffmpeg")
+    }
+    static var noVideoTrack: String { t("The file has no video track", "В файле нет видеодорожки", "У файлі немає відеодоріжки", "У файле няма відэадарожкі") }
+    static var unreadable: String { t("Couldn't read the file — is it really a video?", "Не удалось прочитать файл — это точно видео?", "Не вдалося прочитати файл — це точно відео?", "Не ўдалося прачытаць файл — гэта сапраўды відэа?") }
+    static var ffmpegFailed: String { t("ffmpeg exited with an error", "ffmpeg завершился с ошибкой", "ffmpeg завершився з помилкою", "ffmpeg завяршыўся з памылкай") }
+
+    // Подписи моделей
+    static var chubby: String { t("“fatty”", "«толстенький»", "«товстунчик»", "«тоўсценькі»") }
+    static var withCamera: String { t("with camera", "с камерой", "з камерою", "з камерай") }
+    static var gb: String { t("GB", "ГБ", "ГБ", "ГБ") }
+}

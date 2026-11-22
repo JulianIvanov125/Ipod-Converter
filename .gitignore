@@ -1,0 +1,13 @@
+# Сборка SwiftPM и готовое приложение
+.build/
+build/
+*.app
+
+# macOS
+.DS_Store
+._*
+
+# Xcode / SwiftPM служебное
+.swiftpm/
+*.xcodeproj/xcuserdata/
+DerivedData/
