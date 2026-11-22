@@ -32,6 +32,19 @@ enum SelfTest {
             }
             return true
         }
+        if args.contains("--selftest-ipods") {
+            print("сейчас подключены: \(IPodDetector.detect().map(\.title))")
+            let cases: [(Int, [String], String)] = [
+                (0x1209, ["A002"], "iPod 5G 30GB"), (0x1209, ["A446"], "iPod 5.5G 30GB"), (0x1209, [], "5G/5.5G без диска"),
+                (0x1261, ["B029"], "classic 80GB"), (0x1261, ["B562"], "classic 120GB"), (0x1261, ["C297"], "classic 160GB 2009"),
+                (0x1262, [], "nano 3"), (0x1265, [], "nano 5"), (0x1266, [], "nano 6 (без видео)"), (0x1267, [], "nano 7"),
+                (0x129E, [], "touch 4"), (0x8007, [], "хаб Apple"),
+            ]
+            for (pid, nums, name) in cases {
+                print(String(format: "  0x%04X %@ → ", pid, name) + (IPodDetector.model(forUSB: pid, modelNumbers: nums)?.title ?? "не iPod с видео"))
+            }
+            exit(0)
+        }
         if args.contains("--selftest-tools") {
             print("ffmpeg:  \(FFmpeg.tool("ffmpeg") ?? "нет")")
             print("ffprobe: \(FFmpeg.tool("ffprobe") ?? "нет")")

@@ -305,8 +305,24 @@ final class Store {
     }
 
     /// Убрать вкладку (снять звёздочку). Конвертации под этот iPod останавливаются.
+    /// Вкладки подключённых iPod, которые пользователь закрыл (до отключения устройства).
+    @ObservationIgnored private var dismissedConnected: Set<IPodModel> = []
+
+    /// Подключили iPod: добавляем его вкладку и выбираем (если ничего не конвертируется).
+    func iPodConnected(_ m: IPodModel) {
+        guard !dismissedConnected.contains(m) else { return }
+        if !favorites.contains(m) { favorites.insert(m) }
+        if !isBusy { model = m }
+    }
+
+    func iPodDisconnected(_ m: IPodModel) {
+        dismissedConnected.remove(m)
+    }
+
     func removeTab(_ m: IPodModel) {
         guard favorites.contains(m), favorites.count > 1 else { return }
+        // Закрыли вкладку подключённого iPod — не навязываем её снова, пока его не переподключат.
+        if IPodDetector.shared.isConnected(m) { dismissedConnected.insert(m) }
         for item in items where item.isConverting && item.usedModel == m { item.cancel() }
         if isMusicBusy && batch.model == m { cancelMusic() }
         toggleFavorite(m)
@@ -412,6 +428,17 @@ final class Store {
         let saved = (UserDefaults.standard.stringArray(forKey: "favorites") ?? []).compactMap(IPodModel.init(rawValue:))
         favorites = Set(saved.isEmpty ? IPodModel.defaultFavorites : saved)
         if !favorites.contains(model) { favorites.insert(model) }
+        let detector = IPodDetector.shared
+        detector.onConnect = { [weak self] m in self?.iPodConnected(m) }
+        detector.preferEnhanced5G = { [weak self] in
+            guard let self else { return false }
+            return self.favorites.contains(.classic55G) && !self.favorites.contains(.classic5G)
+        }
+        detector.onDisconnect = { [weak self] m in self?.iPodDisconnected(m) }
+        // Не в самотестах — им опрос USB ни к чему.
+        if !CommandLine.arguments.contains(where: { $0.hasPrefix("--selftest") }) {
+            DispatchQueue.main.async { detector.start() }
+        }
     }
 
     var isBusy: Bool { items.contains { $0.isConverting } || isMusicBusy }

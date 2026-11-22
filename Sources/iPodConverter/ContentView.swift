@@ -249,7 +249,8 @@ struct IPodTabs: View {
         HStack(spacing: 2) {
             ForEach(store.favoriteModels) { m in
                 IPodTab(
-                    title: m.title,
+                    title: IPodDetector.shared.isConnected(m) ? L.yourIPod(m.title) : m.title,
+                    connected: IPodDetector.shared.isConnected(m),
                     selected: store.model == m,
                     canSelect: !store.isBusy,
                     canRemove: store.favoriteModels.count > 1,
@@ -277,6 +278,7 @@ struct IPodTabs: View {
 
 private struct IPodTab: View {
     let title: String
+    var connected = false
     let selected: Bool
     let canSelect: Bool
     let canRemove: Bool
@@ -287,6 +289,11 @@ private struct IPodTab: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            if connected {
+                // Подключённый iPod: зелёная точка и «Your iPod …»
+                Circle().fill(Color.green).frame(width: 6, height: 6)
+                    .help(L.connectedHelp)
+            }
             Text(title)
                 .font(.system(size: 12, weight: selected ? .semibold : .regular))
                 .lineLimit(1)
@@ -394,8 +401,16 @@ struct CatalogView: View {
                     .foregroundStyle(fav ? Color.yellow : Theme.tint(0.25))
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(m.title)
-                        .font(.system(size: 13, weight: fav ? .semibold : .regular))
+                    HStack(spacing: 6) {
+                        Text(m.title)
+                            .font(.system(size: 13, weight: fav ? .semibold : .regular))
+                        if IPodDetector.shared.isConnected(m) {
+                            Text(L.connectedBadge).font(.system(size: 10, weight: .semibold))
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Capsule().fill(Color.green.opacity(0.18)))
+                                .foregroundStyle(.green)
+                        }
+                    }
                     Text("\(m.details) · \(m.settings(max: false).w)×\(m.settings(max: false).h)" + (m.supportsMax ? " \(L.upTo640)" : "") + " · H.264 \(m.settings(max: false).profileName)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)

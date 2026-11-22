@@ -242,6 +242,11 @@ enum L {
         if o.sampleRate > 0 { parts.append(o.sampleRate == 44100 ? "44.1 \(kHz)" : "48 \(kHz)") }
         return t("Output: ", "Выход: ", "Вихід: ", "Выхад: ") + parts.joined(separator: " · ")
     }
+    static func yourIPod(_ m: String) -> String { t("Your \(m)", "Ваш \(m)", "Ваш \(m)", "Ваш \(m)") }
+    static var connectedBadge: String { t("connected", "подключён", "підключений", "падключаны") }
+    static var connectedHelp: String {
+        t("This iPod is connected now", "Этот iPod сейчас подключён", "Цей iPod зараз підключений", "Гэты iPod зараз падключаны")
+    }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }
