@@ -22,12 +22,16 @@ enum MusicLibrary {
     on run argv
         set pName to item 1 of argv
         set asVideo to (item 2 of argv) is "video"
-        tell application "Music"
-            if not (exists user playlist pName) then
-                make new user playlist with properties {name:pName}
-            end if
-            set pl to user playlist pName
-        end tell
+        -- Пустое имя плейлиста — только в медиатеку (треки: пользователь сам собирает плейлисты).
+        set pl to missing value
+        if pName is not "" then
+            tell application "Music"
+                if not (exists user playlist pName) then
+                    make new user playlist with properties {name:pName}
+                end if
+                set pl to user playlist pName
+            end tell
+        end if
         set pids to {}
         set i to 3
         repeat while i + 5 ≤ (count of argv)
@@ -52,21 +56,25 @@ enum MusicLibrary {
                             set location of t to f
                         end try
                         set pid to persistent ID of t
-                        if not (exists (some track of pl whose persistent ID is pid)) then
+                        if pl is not missing value and not (exists (some track of pl whose persistent ID is pid)) then
                             duplicate t to pl
                         end if
                     else
                         -- «add» иногда ничего не возвращает (файл уже в медиатеке и т. п.) — тогда ищем трек сами.
                         set t to missing value
                         try
+                            if pl is missing value then
+                            set t to add f
+                        else
                             set t to add f to pl
+                        end if
                         end try
                         if t is missing value and tName is not "" then
                             delay 0.5
                             try
                                 set t to item 1 of (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
                                 set pid to persistent ID of t
-                                if not (exists (some track of pl whose persistent ID is pid)) then
+                                if pl is not missing value and not (exists (some track of pl whose persistent ID is pid)) then
                                     duplicate t to pl
                                 end if
                             end try

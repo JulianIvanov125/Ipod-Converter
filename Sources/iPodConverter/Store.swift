@@ -314,6 +314,19 @@ final class Store {
     var addToMusic: Bool {
         didSet { UserDefaults.standard.set(addToMusic, forKey: "addToMusic") }
     }
+    /// Треки: по умолчанию только в медиатеку «Музыки» (плейлисты пользователь собирает сам).
+    /// Режим плейлиста — сразу собрать их в плейлист с этим названием: на iPod он придёт готовым.
+    var musicToPlaylist: Bool {
+        didSet { UserDefaults.standard.set(musicToPlaylist, forKey: "musicToPlaylist") }
+    }
+    var musicPlaylist: String {
+        didSet { UserDefaults.standard.set(musicPlaylist, forKey: "musicPlaylist") }
+    }
+    /// Плейлист для треков или "" — только медиатека.
+    var trackPlaylist: String {
+        let name = musicPlaylist.trimmingCharacters(in: .whitespacesAndNewlines)
+        return musicToPlaylist ? name : ""
+    }
     /// Режим «Максимум» (640×480, 1.5 Мбит/с) для моделей, которые его поддерживают.
     var maxQuality: Bool {
         didSet { UserDefaults.standard.set(maxQuality, forKey: "maxQuality") }
@@ -472,6 +485,8 @@ final class Store {
             || UserDefaults.standard.string(forKey: "rootFolder") != nil
         model = IPodModel(rawValue: UserDefaults.standard.string(forKey: "model") ?? "") ?? .classic5G
         addToMusic = UserDefaults.standard.object(forKey: "addToMusic") as? Bool ?? true
+        musicToPlaylist = UserDefaults.standard.bool(forKey: "musicToPlaylist")
+        musicPlaylist = UserDefaults.standard.string(forKey: "musicPlaylist") ?? ""
         maxQuality = UserDefaults.standard.bool(forKey: "maxQuality")
         let saved = (UserDefaults.standard.stringArray(forKey: "favorites") ?? []).compactMap(IPodModel.init(rawValue:))
         // Первый запуск — вкладки по умолчанию; если пользователь закрыл все — оставляем пусто.
@@ -707,6 +722,7 @@ final class Store {
         }
         musicBatchStatus = (L.addingToMusic, true)
         musicReport = nil
+        let playlist = trackPlaylist
         Task {
             var added: [String] = []
             for start in stride(from: 0, to: b.outputs.count, by: Self.musicChunk) {
@@ -720,7 +736,7 @@ final class Store {
                 }
                 musicBatchStatus = (L.addingToMusicN(start, b.outputs.count), true)
                 do {
-                    let answers = try await MusicLibrary.add(items, playlist: b.model.playlistName, asMusicVideo: false)
+                    let answers = try await MusicLibrary.add(items, playlist: playlist, asMusicVideo: false)
                     for (k, entry) in part.enumerated() {
                         let t = entry.1
                         let answer = k < answers.count ? answers[k] : ""
@@ -745,7 +761,7 @@ final class Store {
                 }
             }
             let allOK = failures.isEmpty
-            let text = allOK ? summary + " · " + L.inMusic(b.model.playlistName)
+            let text = allOK ? summary + " · " + (playlist.isEmpty ? L.inLibrary : L.inMusic(playlist))
                              : summary + " · " + L.addedToMusicPartial(added.count, b.outputs.count)
             musicBatchStatus = (text, allOK)
             musicReport = report(added)

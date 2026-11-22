@@ -170,12 +170,28 @@ struct MusicSection: View {
 
             SyncGuideButton(store: store)
             Toggle(isOn: $store.addToMusic) {
-                Text(L.toMusic(store.model.playlistName))
+                Text(L.toMusicLibrary)
                     .font(.system(size: 12))
             }
             .toggleStyle(.switch)
             .controlSize(.small)
-            .help(L.toMusicHelp)
+            .help(L.toMusicLibraryHelp)
+            if store.addToMusic {
+                // Режим плейлиста: треки сразу собираются в плейлист — на iPod он придёт готовым.
+                Toggle(isOn: $store.musicToPlaylist) {
+                    Text(L.intoPlaylist).font(.system(size: 12))
+                }
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help(L.intoPlaylistHelp)
+                if store.musicToPlaylist {
+                    TextField(L.playlistNamePlaceholder, text: $store.musicPlaylist)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .frame(width: 160)
+                        .disabled(store.isMusicBusy)
+                }
+            }
 
             if let p = store.musicBatchProgress {
                 BatchProgress(done: p.done, total: p.total, fraction: p.fraction)

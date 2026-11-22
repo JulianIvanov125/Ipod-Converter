@@ -347,6 +347,22 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var toMusicLibrary: String { t("Add to Music", "В «Музыку»", "У «Музику»", "У «Музыку»") }
+    static var toMusicLibraryHelp: String {
+        t("After conversion tracks go into your Music library — with covers and tags, ready to sync to the iPod.",
+          "После конвертации треки попадут в медиатеку «Музыки» — с обложками и тегами, готовые к синхронизации с iPod.",
+          "Після конвертації треки потраплять у медіатеку «Музики» — з обкладинками й тегами, готові до синхронізації з iPod.",
+          "Пасля канвертацыі трэкі трапяць у медыятэку «Музыкі» — з вокладкамі і тэгамі, гатовыя да сінхранізацыі з iPod.")
+    }
+    static var intoPlaylist: String { t("Into playlist", "В плейлист", "У плейлист", "У плэйліст") }
+    static var intoPlaylistHelp: String {
+        t("Also collect these tracks into a playlist — after syncing it is ready on the iPod.",
+          "Ещё и собрать эти треки в плейлист — после синхронизации он будет готов на iPod.",
+          "Ще й зібрати ці треки в плейлист — після синхронізації він буде готовий на iPod.",
+          "Яшчэ і сабраць гэтыя трэкі ў плэйліст — пасля сінхранізацыі ён будзе гатовы на iPod.")
+    }
+    static var playlistNamePlaceholder: String { t("Playlist name", "Название плейлиста", "Назва плейлиста", "Назва плэйліста") }
+    static var inLibrary: String { t("In the Music library", "В медиатеке «Музыки»", "У медіатеці «Музики»", "У медыятэцы «Музыкі»") }
     static var copyForSupport: String { t("Copy for support", "Скопировать для поддержки", "Скопіювати для підтримки", "Скапіяваць для падтрымкі") }
     static var copyForSupportHelp: String {
         t("Copies what succeeded, where it failed and the error text — send it to the developer.",
