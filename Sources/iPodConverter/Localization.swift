@@ -347,6 +347,12 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var processTimedOut: String {
+        t("the file took too long to read — it may be damaged or the disk is too slow",
+          "файл читается слишком долго — возможно, он повреждён или диск слишком медленный",
+          "файл читається занадто довго — можливо, він пошкоджений або диск занадто повільний",
+          "файл чытаецца занадта доўга — магчыма, ён пашкоджаны або дыск занадта павольны")
+    }
     static func storageLine(free: String, total: String) -> String {
         t("iPod: \(free) free of \(total)", "iPod: свободно \(free) из \(total)", "iPod: вільно \(free) з \(total)", "iPod: вольна \(free) з \(total)")
     }

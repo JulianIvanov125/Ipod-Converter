@@ -230,6 +230,29 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-load"), args.count > i + 2, let n = Int(args[i + 1]) {
+            // Нагрузка: n анализов файлов через ту же очередь, что и при добавлении папки; ни один не должен зависнуть.
+            let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                let items = (0..<n).map { TrackItem(url: files[$0 % files.count]) }
+                let t0 = Date()
+                for t in items {
+                    Task {
+                        await TaskLimiter.probes.acquire()
+                        await t.load()
+                        await TaskLimiter.probes.release()
+                    }
+                }
+                while items.contains(where: { $0.state == .loading }) && Date().timeIntervalSince(t0) < 90 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                let stuck = items.filter { $0.state == .loading }.count
+                let failed = items.filter { if case .failed = $0.state { return true } else { return false } }.count
+                print(String(format: "анализ %d файлов: %.1f с, зависло %d, с ошибкой %d", n, Date().timeIntervalSince(t0), stuck, failed))
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-detect") {
             // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
             Task { @MainActor in

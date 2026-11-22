@@ -134,7 +134,9 @@ final class IPodDetector {
             p.standardOutput = FileHandle.nullDevice
             p.standardError = FileHandle.nullDevice
             try? p.run()
-            p.waitUntilExit()
+            // Ждём до 10 с без waitUntilExit (на фоновых потоках он иногда виснет).
+            let deadline = Date().addingTimeInterval(10)
+            while p.isRunning && Date() < deadline { usleep(50_000) }
             // Обращение к съёмным дискам вызывает системный запрос; ответ подхватит следующий опрос.
             let keys: [URLResourceKey] = [.volumeIsRemovableKey, .volumeIsEjectableKey, .volumeIsInternalKey]
             for v in FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? [] {

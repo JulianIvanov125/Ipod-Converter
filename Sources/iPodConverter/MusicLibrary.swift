@@ -171,22 +171,12 @@ enum MusicLibrary {
 
     @discardableResult
     private static func run(_ source: String, _ argv: [String], app: String) async throws -> String {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", source] + argv
-        let err = Pipe(), out = Pipe()
-        p.standardError = err
-        p.standardOutput = out
-        try p.run()
-        let (status, stdout): (Int32, String) = await withCheckedContinuation { cont in
-            DispatchQueue.global().async {
-                let data = out.fileHandleForReading.readDataToEndOfFile()
-                p.waitUntilExit()
-                cont.resume(returning: (p.terminationStatus, String(decoding: data, as: UTF8.self)))
-            }
-        }
+        // Партия из 50 треков в «Музыку» может идти несколько минут — ждём до 15.
+        let r = try await ProcessRunner.run("/usr/bin/osascript", ["-e", source] + argv, timeout: 900)
+        if r.timedOut { throw FFmpegError.failed(L.cantAddTo(app) + L.processTimedOut) }
+        let status = r.status, stdout = String(decoding: r.out, as: UTF8.self)
         guard status == 0 else {
-            let msg = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            let msg = String(decoding: r.err, as: UTF8.self)
             if msg.contains("-1743") { throw FFmpegError.failed(L.noAppAccess(app)) }
             throw FFmpegError.failed(L.cantAddTo(app) + FFmpeg.ffmpegOutputLine(msg))
         }

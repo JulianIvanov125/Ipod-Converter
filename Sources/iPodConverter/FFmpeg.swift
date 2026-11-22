@@ -50,23 +50,11 @@ enum FFmpeg {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    /// Запускает процесс и возвращает stdout.
-    static func capture(_ path: String, _ args: [String]) async throws -> Data {
-        try await withCheckedThrowingContinuation { cont in
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: path)
-            p.arguments = args
-            let out = Pipe()
-            p.standardOutput = out
-            p.standardError = FileHandle.nullDevice
-            p.standardInput = FileHandle.nullDevice
-            do { try p.run() } catch { cont.resume(throwing: error); return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let data = out.fileHandleForReading.readDataToEndOfFile()
-                p.waitUntilExit()
-                cont.resume(returning: data)
-            }
-        }
+    /// Запускает процесс и возвращает stdout. Больше 2 минут — останавливаем (файл не «висит» вечно).
+    static func capture(_ path: String, _ args: [String], timeout: TimeInterval = 120) async throws -> Data {
+        let r = try await ProcessRunner.run(path, args, timeout: timeout)
+        if r.timedOut { throw FFmpegError.failed(L.processTimedOut) }
+        return r.out
     }
 
     // MARK: - ffprobe
@@ -336,5 +324,54 @@ final class ConversionJob: @unchecked Sendable {
     func cancel() {
         cancelled = true
         if process.isRunning { process.terminate() }
+    }
+}
+
+/// Запуск внешней программы без `waitUntilExit()`: на фоновых потоках он иногда «теряет»
+/// завершение процесса и ждёт вечно (трек навсегда остаётся «загружается»).
+/// Ждём через terminationHandler, stdout и stderr читаем параллельно, по таймауту — останавливаем.
+enum ProcessRunner {
+    struct Result {
+        let status: Int32
+        let out: Data
+        let err: Data
+        let timedOut: Bool
+    }
+
+    private final class Box: @unchecked Sendable {
+        var out = Data()
+        var err = Data()
+        var timedOut = false
+    }
+
+    static func run(_ path: String, _ args: [String], timeout: TimeInterval) async throws -> Result {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let out = Pipe(), err = Pipe()
+        p.standardOutput = out
+        p.standardError = err
+        p.standardInput = FileHandle.nullDevice
+        let group = DispatchGroup()
+        let box = Box()
+        group.enter(); group.enter(); group.enter()
+        p.terminationHandler = { _ in group.leave() }
+        try p.run()
+        DispatchQueue.global(qos: .userInitiated).async {
+            box.out = out.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            box.err = err.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+            if p.isRunning { box.timedOut = true; p.terminate() }
+        }
+        return await withCheckedContinuation { cont in
+            group.notify(queue: .global()) {
+                cont.resume(returning: Result(status: p.terminationStatus, out: box.out, err: box.err, timedOut: box.timedOut))
+            }
+        }
     }
 }

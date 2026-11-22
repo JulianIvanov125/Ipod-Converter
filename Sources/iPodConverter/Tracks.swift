@@ -278,8 +278,8 @@ extension FFmpeg {
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return false }
+        // Конец вывода = программа закончила; waitUntilExit не нужен (и бывает, что виснет).
         let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
         return String(decoding: data, as: UTF8.self).contains("aac_at")
     }()
 
