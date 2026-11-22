@@ -170,6 +170,36 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-water"), args.count > i + 1 {
+            // Модель воды без звука: капли по расписанию, кадры в PNG 1600×900, время кадра.
+            let dir = URL(fileURLWithPath: args[i + 1])
+            let water = WaterSurface()
+            water.resize(to: CGSize(width: 1600, height: 900))
+            let tones: [SIMD3<Float>] = [SIMD3(0.95, 0.25, 0.2), SIMD3(0.95, 0.6, 0.3), SIMD3(0.4, 0.6, 0.95)]
+            var t = 1000.0
+            var shots = [0.4, 1.2, 2.5]
+            var cost = 0.0, frames = 0
+            for f in 0..<180 {
+                if f % 15 == 0 { water.drop(x: .random(in: 0.1...0.9), y: .random(in: 0.1...0.9), strength: 1.2, radius: 6.5, color: tones[0]) }
+                if f % 15 == 7 { water.drop(x: .random(in: 0.1...0.9), y: .random(in: 0.1...0.9), strength: 0.7, radius: 3.4, color: tones[(f / 15) % 2 + 1]) }
+                t += 1.0 / 60
+                let c0 = Date()
+                water.advance(to: t)
+                let img = water.image(deep: SIMD3(0.07, 0.05, 0.07), glow: 0.2)
+                cost += Date().timeIntervalSince(c0); frames += 1
+                if let s0 = shots.first, Double(f) / 60 >= s0, let img {
+                    shots.removeFirst()
+                    let ctx = CGContext(data: nil, width: 1600, height: 900, bitsPerComponent: 8, bytesPerRow: 0,
+                                        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    ctx.interpolationQuality = .high
+                    ctx.draw(img, in: CGRect(x: 0, y: 0, width: 1600, height: 900))
+                    let rep = NSBitmapImageRep(cgImage: ctx.makeImage()!)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent(String(format: "water-%.1f.png", s0)))
+                }
+            }
+            print(String(format: "вода: %.2f мс на кадр (сетка %d×%d)", cost / Double(frames) * 1000, water.w, water.h))
+            exit(0)
+        }
         if let i = args.firstIndex(of: "--selftest-viz"), args.count > i + 1 {
             let f = URL(fileURLWithPath: args[i + 1])
             Task { @MainActor in

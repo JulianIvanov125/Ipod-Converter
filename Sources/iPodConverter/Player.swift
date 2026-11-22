@@ -826,7 +826,7 @@ struct FullPlayerView: View {
                     VStack {
                         Spacer()
                         AudioVisualizer(style: viz.style, colors: controller.palette)
-                            .frame(height: min(geo.size.height * 0.26, 300))
+                            .frame(height: min(geo.size.height * 0.32, 380))
                             .opacity(LyricsStore.shared.visible ? 0.6 : 0.9)
                     }
                 } else {
@@ -851,7 +851,7 @@ struct FullPlayerView: View {
                     }
                     .padding(.horizontal, geo.size.width * 0.06)
                     // место под кнопки, а при эквалайзере — под его полосу
-                    .padding(.bottom, viz.style == .bars ? max(140, min(geo.size.height * 0.26, 300)) : 140)
+                    .padding(.bottom, viz.style == .bars ? max(140, min(geo.size.height * 0.32, 380)) : 140)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 // Обложка — сверху по центру

@@ -161,11 +161,11 @@ final class LevelSmoother {
             prevRaw[i] = v
         }
         // Относительная шкала: самая громкая полоса — у потолка, остальные ниже на свою разницу в дБ
-        // (окно 30 дБ). Потолок быстро поднимается и медленно опускается — без «качания» всей картинки.
+        // (окно 24 дБ). Потолок быстро поднимается и медленно опускается — без «качания» всей картинки.
         let db = AudioAnalyzer.shared.snapshotDB()
         let frameTop = db.max() ?? -120
         eqTop = frameTop > eqTop ? eqTop + (frameTop - eqTop) * 0.6 : max(frameTop, eqTop - 0.25)
-        let window: Float = 30
+        let window: Float = 24
         for i in 0..<Self.n {
             let quiet = max(0, min(1, (eqTop + 70) / 20))   // совсем тихо — столбики опускаются
             let v = max(0, min(1, (db[i] - (eqTop - window)) / window)) * quiet
@@ -247,7 +247,7 @@ final class LevelSmoother {
 // MARK: - Капли на воде
 
 /// Капля: место (доли экрана), время, сила, частота (для подписи).
-private struct Drop {
+struct Drop {
     let x: CGFloat
     let y: CGFloat
     let born: Double
@@ -257,17 +257,20 @@ private struct Drop {
 }
 
 final class DropField {
-    fileprivate private(set) var drops: [Drop] = []
+    private(set) var drops: [Drop] = []
     static let life = 4.5
     private var next: Double = 0
     /// Сколько капель появилось всего (для самотеста).
     private(set) var spawned = 0
 
-    func spawn(_ onsets: [(band: Int, strength: Float)], time: Double) {
+    /// Возвращает капли, появившиеся в этом кадре.
+    @discardableResult
+    func spawn(_ onsets: [(band: Int, strength: Float)], time: Double) -> [Drop] {
         drops.removeAll { time - $0.born > Self.life }
         // Вид сверху: капля падает в случайное место всей площади. Не чаще ~3 в секунду —
         // берём только самый сильный скачок кадра, удар баса даёт каплю крупнее.
-        guard time >= next else { return }
+        guard time >= next else { return [] }
+        let before = drops.count
         // До двух капель за раз (бас и самый сильный звук сверху) — в разных местах экрана.
         for o in onsets.sorted(by: { $0.strength > $1.strength }).prefix(2) {
             let bass = o.band < 0
@@ -279,7 +282,9 @@ final class DropField {
             next = time + (bass ? 0.15 : 0.2)
             spawned += 1
         }
+        let fresh = Array(drops[before...])
         if drops.count > 26 { drops.removeFirst(drops.count - 26) }
+        return fresh
     }
 }
 
@@ -291,6 +296,7 @@ struct AudioVisualizer: View {
     private var accents: [Color] { colors.accents }
     @State private var smoother = LevelSmoother()
     @State private var field = DropField()
+    @State private var water = WaterSurface()
 
     var body: some View {
         TimelineView(.animation) { (timeline: TimelineViewDefaultContext) in
@@ -308,8 +314,7 @@ struct AudioVisualizer: View {
             drawAxis(ctx, size)
             drawBarLabels(ctx, size, t: t)
         case .waves:
-            field.spawn(onsets, time: t)
-            drawDrops(ctx, size, t: t, colors: [.white, Color(red: 0.45, green: 0.75, blue: 1), Color(red: 0.7, green: 0.55, blue: 1)])
+            drawWater(ctx, size, t: t, onsets: onsets)
         case .coverWaves:
             drawColorFlow(&ctx, size, t: t)
         }
@@ -342,7 +347,7 @@ struct AudioVisualizer: View {
         var heights = [CGFloat](repeating: 0, count: n)
         for i in 0..<n {
             let boost = i < 12 ? CGFloat(smoother.kick) * 0.4 * (1 - CGFloat(i) / 12) : 0
-            heights[i] = max(bw, min(1, pow(CGFloat(smoother.eq[i]), 1.3) + boost) * g.maxH)
+            heights[i] = max(bw, min(1, pow(CGFloat(smoother.eq[i]), 2.0) + boost) * g.maxH)
         }
         func rect(_ i: Int) -> CGRect {
             CGRect(x: CGFloat(i) * (g.w + g.gap) + inset, y: g.baseY - heights[i], width: bw, height: heights[i])
@@ -377,7 +382,7 @@ struct AudioVisualizer: View {
         ctx.stroke(curve, with: .color(.white.opacity(0.35)), lineWidth: 1)
         // Пики — светящиеся точки, медленно опускаются.
         for i in 0..<n {
-            let py = g.baseY - pow(CGFloat(smoother.eqPeaks[i]), 1.3) * g.maxH - 9
+            let py = g.baseY - pow(CGFloat(smoother.eqPeaks[i]), 2.0) * g.maxH - 9
             let c = CGPoint(x: CGFloat(i) * (g.w + g.gap) + g.w / 2, y: py)
             let d = min(bw, 6)
             glow.fill(Circle().path(in: CGRect(x: c.x - d, y: c.y - d, width: d * 2, height: d * 2)), with: .color(accents[2]))
@@ -403,44 +408,43 @@ struct AudioVisualizer: View {
         let g = barGeometry(size)
         for (band, entry) in smoother.labels {
             let alpha = max(0, 1 - (t - entry.t) / 0.6)
-            let y = g.baseY - pow(CGFloat(smoother.eqPeaks[band]), 1.3) * g.maxH - 24
+            let y = g.baseY - pow(CGFloat(smoother.eqPeaks[band]), 2.0) * g.maxH - 24
             pill(ctx, LevelSmoother.label(LevelSmoother.hz(band)), at: CGPoint(x: barCenterX(Double(band), size), y: max(14, y)),
                  size: size, alpha: alpha)
         }
     }
 
-    // MARK: Капли на воде
 
-    private func drawDrops(_ ctx: GraphicsContext, _ size: CGSize, t: Double, colors: [Color]) {
-        // Вид на воду сверху: круги расходятся широко, почти через весь экран, и медленно тают.
-        let reach = hypot(size.width, size.height) * 0.45
-        // Удар баса подсвечивает все круги разом — пульс в ритм, гаснет плавно.
-        let kick = Double(smoother.kick)
-        var glow = ctx
-        glow.addFilter(.blur(radius: 6))
-        for d in field.drops {
-            let age = t - d.born
-            let life = age / DropField.life
-            guard life < 1 else { continue }
-            let c = colors[d.colorIndex % colors.count]
-            let center = CGPoint(x: d.x * size.width, y: d.y * size.height)
-            // Плавное проявление за 0.25 с и мягкое затухание — без вспышек и мерцания.
-            let appear = min(1, age / 0.25)
-            let fade = pow(1 - life, 2)
-            let bass = d.hz == nil
-            for ring in 0..<(bass ? 4 : 3) {
-                let ra = age - Double(ring) * (bass ? 0.22 : 0.35)
-                guard ra > 0 else { continue }
-                // Замедление, как у настоящей волны: быстро вначале, потом еле ползёт.
-                let r = CGFloat(1 - exp(-ra * (bass ? 1.1 : 0.75))) * reach * (0.45 + d.strength * 0.55) + 2
-                let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
-                let alpha = min(0.85, 0.38 * Double(d.strength) * appear * fade * (1 - Double(ring) * 0.22) * (1 + kick * 1.5))
-                let width = (bass ? 2.4 : 1.5) - CGFloat(ring) * 0.3
-                glow.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha * 0.6)), lineWidth: width + 4)
-                ctx.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha)), lineWidth: width)
+    // MARK: Вода
+
+    private func drawWater(_ ctx: GraphicsContext, _ size: CGSize, t: Double, onsets: [(band: Int, strength: Float)]) {
+        water.resize(to: size)
+        let tones = accents.map { c -> SIMD3<Float> in
+            let v = c.rgb
+            return v * (0.95 / max(0.2, max(v.x, max(v.y, v.z))))     // яркий тон того же цвета
+        }
+        for d in field.spawn(onsets, time: t) {
+            // Тон капли — по высоте звука: низы, середина (голос), верха — разные цвета обложки.
+            let color: SIMD3<Float>
+            let radius: Float
+            if let hz = d.hz {
+                let u = Float(log(hz / 40) / log(16000.0 / 40))
+                color = u < 0.5 ? mix(tones[0], tones[1], u * 2) : mix(tones[1], tones[2], (u - 0.5) * 2)
+                radius = 4.0 - u * 1.4
+            } else {
+                color = tones[0]
+                radius = 6.5
             }
+            water.drop(x: d.x, y: d.y, strength: Float(d.strength), radius: radius, color: color)
+        }
+        water.advance(to: t)
+        let deep = colors.background.rgb * 0.8 + SIMD3<Float>(repeating: 0.03)
+        if let img = water.image(deep: deep, glow: smoother.kick) {
+            ctx.draw(Image(decorative: img, scale: 1).resizable().interpolation(.high), in: CGRect(origin: .zero, size: size))
         }
     }
+
+    private func mix(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ k: Float) -> SIMD3<Float> { a + (b - a) * min(1, max(0, k)) }
 
     // MARK: Цвета обложки — весь фон заливается и переливается цветами альбома в ритм
 
