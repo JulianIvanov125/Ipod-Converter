@@ -26,6 +26,22 @@ extension View {
         }
     }
 
+    /// Плавающие панели (плееры) поверх списка: матовое стекло с подложкой — кнопки под ним не просвечивают.
+    @ViewBuilder
+    func frostedGlass<S: Shape>(in shape: S, solid: Color = Theme.raised) -> some View {
+        if GlassMode.isOn {
+            if #available(macOS 26.0, *) {
+                self.background(shape.fill(solid.opacity(0.55)))
+                    .glassEffect(Glass.regular, in: shape)
+            } else {
+                self.background(shape.fill(solid.opacity(0.55)))
+                    .background(.regularMaterial, in: shape)
+            }
+        } else {
+            self.background(shape.fill(solid))
+        }
+    }
+
     /// Полупрозрачная заливка карточек: при стекле сквозь неё видно размытый фон окна.
     func glassCard<S: InsettableShape>(_ shape: S, solid: Color) -> some View {
         background(shape.fill(GlassMode.isOn ? Theme.glassCard : solid))
