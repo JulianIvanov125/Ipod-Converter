@@ -9,6 +9,7 @@ final class VideoItem: Identifiable {
     enum State: Equatable {
         case loading
         case ready
+        case queued
         case converting(Double)
         case done(URL)
         case failed(String)
@@ -16,6 +17,10 @@ final class VideoItem: Identifiable {
 
     let id = UUID()
     let url: URL
+    /// Вызывается, когда конвертация закончилась (готово, ошибка или отмена) — очередь берёт следующее.
+    @ObservationIgnored var onFinish: (() -> Void)?
+    /// В пачке из нескольких видео — без уведомления на каждый файл (будет одно общее).
+    @ObservationIgnored var quiet = false
     var info: MediaInfo?
     var thumbnail: NSImage?
     /// Отмечено галочкой (режим «Выбранные»).
@@ -75,9 +80,22 @@ final class VideoItem: Identifiable {
         return info?.title ?? url.deletingPathExtension().lastPathComponent
     }
 
+    /// Идёт или ждёт в очереди — карточку в это время не редактируем.
     var isConverting: Bool {
-        if case .converting = state { return true }
-        return false
+        switch state {
+        case .converting, .queued: return true
+        default: return false
+        }
+    }
+
+    private func ended() {
+        let f = onFinish
+        onFinish = nil
+        f?()
+    }
+
+    private func notify(title: String, body: String, fileURL: URL) {
+        if !quiet { Notifier.notify(title: title, body: body, fileURL: fileURL) }
     }
 
     func load() async {
@@ -100,9 +118,11 @@ final class VideoItem: Identifiable {
 
     /// videoRoot — папка «iPod Converter Video».
     func convert(model: IPodModel, settings: EncodeSettings, videoRoot: URL, addToMusic: Bool) {
-        guard let info, !isConverting else { return }
+        if case .converting = state { return }
+        guard let info else { state = .ready; ended(); return }
         guard let ffmpeg = FFmpeg.tool("ffmpeg") else {
             state = .failed(FFmpegError.notFound("ffmpeg").localizedDescription)
+            ended()
             return
         }
         let meta = self.meta ?? VideoMeta(category: .film, title: url.deletingPathExtension().lastPathComponent)
@@ -139,11 +159,13 @@ final class VideoItem: Identifiable {
             )
         } catch {
             state = .failed(error.localizedDescription)
+            ended()
         }
     }
 
     private func finish(status: Int32, stderr: String, output: URL, job: ConversionJob, model: IPodModel) {
         self.job = nil
+        defer { ended() }
         if job.cancelled {
             try? FileManager.default.removeItem(at: output)
             state = .ready
@@ -153,7 +175,7 @@ final class VideoItem: Identifiable {
             outputBytes = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) }
             state = .done(output)
             guard addToMusic else {
-                Notifier.notify(
+                self.notify(
                     title: L.videoReady(model.title),
                     body: L.convertedBody(displayTitle, folder: output.deletingLastPathComponent().lastPathComponent),
                     fileURL: output
@@ -171,14 +193,14 @@ final class VideoItem: Identifiable {
                         try await MusicLibrary.add(output, playlist: model.playlistName, name: meta?.title ?? "", artist: meta?.artist ?? "")
                     }
                     musicStatus = (inTV ? L.inTV(model.playlistName) : L.inMusic(model.playlistName), true)
-                    Notifier.notify(
+                    self.notify(
                         title: L.videoReady(model.title),
                         body: L.addedBody(displayTitle, model.playlistName),
                         fileURL: output
                     )
                 } catch {
                     musicStatus = (error.localizedDescription, false)
-                    Notifier.notify(
+                    self.notify(
                         title: L.videoReady(model.title),
                         body: L.notAddedBody(error.localizedDescription),
                         fileURL: output
@@ -191,7 +213,10 @@ final class VideoItem: Identifiable {
         }
     }
 
-    func cancel() { job?.cancel() }
+    func cancel() {
+        if state == .queued { state = .ready; ended() }
+        job?.cancel()
+    }
 
     /// До конвертации — где лежит оригинал, после — готовый файл.
     func revealInFinder() {
@@ -276,6 +301,8 @@ final class Store {
     private(set) var musicRunning = 0
     @ObservationIgnored private var batch = (model: IPodModel.classic5G, outputs: [(URL, TrackItem)](), converted: 0, kept: 0, failed: 0)
     private static let maxParallelTracks = 3
+    private(set) var musicBatchTotal = 0
+    @ObservationIgnored private var musicBatchIDs: Set<UUID> = []
     var model: IPodModel {
         didSet { UserDefaults.standard.set(model.rawValue, forKey: "model") }
     }
@@ -311,7 +338,7 @@ final class Store {
 
     /// Идёт ли сейчас конвертация под этот iPod.
     func isConverting(for m: IPodModel) -> Bool {
-        items.contains { $0.isConverting && $0.usedModel == m } || (isMusicBusy && batch.model == m)
+        items.contains { $0.isConverting && $0.usedModel == m } || videoQueue.contains { $0.model == m } || (isMusicBusy && batch.model == m)
     }
 
     /// Убрать вкладку (снять звёздочку). Конвертации под этот iPod останавливаются.
@@ -470,7 +497,7 @@ final class Store {
         }
     }
 
-    var isBusy: Bool { items.contains { $0.isConverting } || isMusicBusy }
+    var isBusy: Bool { isVideoBusy || isMusicBusy }
     var isMusicBusy: Bool { musicRunning > 0 || !musicQueue.isEmpty }
 
     /// Принимает файлы и папки: аудио уходит в «Музыку», остальное — в «Видео».
@@ -485,7 +512,10 @@ final class Store {
                 tracks.append(t)
                 addedAudio += 1
                 Task {
+                    // Анализ файлов — не больше 4 одновременно: папка на тысячу файлов не запускает тысячу ffprobe.
+                    await TaskLimiter.probes.acquire()
                     await t.load()
+                    await TaskLimiter.probes.release()
                     MetadataFetcher.shared.enqueue(t)   // пустые теги/обложку — из интернета
                 }
             } else {
@@ -493,7 +523,11 @@ final class Store {
                 let item = VideoItem(url: file)
                 items.append(item)
                 addedVideo += 1
-                Task { await item.load() }
+                Task {
+                    await TaskLimiter.probes.acquire()
+                    await item.load()
+                    await TaskLimiter.probes.release()
+                }
             }
         }
         if addedAudio > 0 && addedVideo == 0 { section = .music }
@@ -596,17 +630,20 @@ final class Store {
         batch = (model, [], 0, 0, 0)
         musicBatchStatus = nil
         let folder = musicDestination
+        musicBatchIDs = []
         for t in list where t.plan(for: model) != nil {
             t.state = .queued
             musicQueue.append(t)
+            musicBatchIDs.insert(t.id)
         }
+        musicBatchTotal = musicBatchIDs.count
         pumpMusic(folder: folder)
     }
 
     private func pumpMusic(folder: URL) {
         while musicRunning < Self.maxParallelTracks, !musicQueue.isEmpty {
             let t = musicQueue.removeFirst()
-            guard t.state == .queued, let plan = t.plan(for: batch.model) else { continue }
+            guard t.state == .queued, let plan = t.plan(for: batch.model) else { musicBatchTotal -= 1; continue }
             musicRunning += 1
             let done: @MainActor (URL?) -> Void = { [weak self] output in
                 guard let self else { return }
@@ -626,6 +663,17 @@ final class Store {
             }
         }
         if musicRunning == 0 && musicQueue.isEmpty { finishMusicBatch() }
+    }
+
+    /// Общий прогресс пачки треков: готовые + доли идущих.
+    var musicBatchProgress: (done: Int, total: Int, fraction: Double)? {
+        guard isMusicBusy, musicBatchTotal > 1 else { return nil }
+        let done = batch.converted + batch.kept + batch.failed
+        let running = tracks.reduce(0.0) { sum, t in
+            guard musicBatchIDs.contains(t.id), case .converting(let p) = t.state else { return sum }
+            return sum + p
+        }
+        return (done, musicBatchTotal, min(1, (Double(done) + running) / Double(musicBatchTotal)))
     }
 
     private func finishMusicBatch() {
@@ -710,11 +758,98 @@ final class Store {
 
     func convert(_ item: VideoItem) {
         guard ensureDestination() else { return }
-        start(item)
+        enqueueVideos([item])
     }
 
-    private func start(_ item: VideoItem) {
-        item.convert(model: model, settings: settings(for: item), videoRoot: outputFolder, addToMusic: addToMusic)
+    // MARK: - Очередь видео
+
+    /// Одновременно кодируем 2 видео: больше не ускоряет (процессор и аппаратный кодер заняты), а Mac тормозит.
+    private static let maxParallelVideos = 2
+    private struct VideoJob {
+        let item: VideoItem
+        let model: IPodModel
+        let settings: EncodeSettings
+        let root: URL
+        let addToMusic: Bool
+    }
+    @ObservationIgnored private var videoQueue: [VideoJob] = []
+    private var videoRunning = 0
+    /// Текущая пачка: сколько всего, сколько закончилось, сколько с ошибкой.
+    private(set) var videoBatch = (total: 0, finished: 0, failed: 0)
+    @ObservationIgnored private var videoBatchIDs: Set<UUID> = []
+    @ObservationIgnored private var videoBatchModels: Set<IPodModel> = []
+
+    var isVideoBusy: Bool { videoRunning > 0 || videoBatch.total > videoBatch.finished }
+
+    /// Модель и настройки фиксируются сразу — можно переключить вкладку iPod и запускать другое.
+    func enqueueVideos(_ list: [VideoItem]) {
+        if !isVideoBusy { videoBatch = (0, 0, 0); videoBatchIDs = []; videoBatchModels = [] }
+        for item in list where !item.isConverting {
+            item.state = .queued
+            videoQueue.append(VideoJob(item: item, model: model, settings: settings(for: item), root: outputFolder, addToMusic: addToMusic))
+            videoBatchIDs.insert(item.id)
+            videoBatchModels.insert(model)
+            videoBatch.total += 1
+        }
+        pumpVideos()
+    }
+
+    private func pumpVideos() {
+        while videoRunning < Self.maxParallelVideos, !videoQueue.isEmpty {
+            let job = videoQueue.removeFirst()
+            // Убрали из списка или отменили, пока ждало, — не считаем.
+            guard job.item.state == .queued, items.contains(where: { $0.id == job.item.id }) else {
+                videoBatch.total -= 1
+                videoBatchIDs.remove(job.item.id)
+                continue
+            }
+            videoRunning += 1
+            job.item.quiet = videoBatch.total > 1
+            job.item.onFinish = { [weak self, weak item = job.item] in
+                guard let self else { return }
+                self.videoRunning -= 1
+                if case .failed = item?.state { self.videoBatch.failed += 1 }
+                if case .ready = item?.state {          // отменили во время конвертации
+                    self.videoBatch.total -= 1
+                } else {
+                    self.videoBatch.finished += 1
+                }
+                self.pumpVideos()
+            }
+            job.item.convert(model: job.model, settings: job.settings, videoRoot: job.root, addToMusic: job.addToMusic)
+        }
+        if videoRunning == 0 && videoQueue.isEmpty && videoBatch.total + videoBatch.finished > 0 { finishVideoBatch() }
+    }
+
+    private func finishVideoBatch() {
+        let b = videoBatch
+        if b.total > 1 {
+            let title = videoBatchModels.count == 1 ? L.videoReady(videoBatchModels.first!.title) : L.videosReadyTitle
+            Notifier.notify(title: title, body: L.videosSummary(done: b.finished - b.failed, failed: b.failed), fileURL: outputFolder)
+        }
+        videoBatch = (0, 0, 0)
+        videoBatchIDs = []
+        videoBatchModels = []
+    }
+
+    /// Общий прогресс пачки видео: готовые + доли идущих.
+    var videoBatchProgress: (done: Int, total: Int, fraction: Double)? {
+        guard isVideoBusy, videoBatch.total > 1 else { return nil }
+        let running = items.reduce(0.0) { sum, v in
+            guard videoBatchIDs.contains(v.id), case .converting(let p) = v.state else { return sum }
+            return sum + p
+        }
+        return (videoBatch.finished, videoBatch.total, min(1, (Double(videoBatch.finished) + running) / Double(videoBatch.total)))
+    }
+
+    /// Остановить все видео: и ждущие в очереди, и идущие.
+    func cancelVideos() {
+        let queued = videoQueue
+        videoQueue.removeAll()
+        videoBatch.total -= queued.count
+        for j in queued { j.item.state = .ready; j.item.onFinish = nil }
+        for v in items where v.isConverting { v.cancel() }
+        if videoRunning == 0 { finishVideoBatch() }
     }
 
     // MARK: - Выбор и фильтр видео
@@ -774,12 +909,12 @@ final class Store {
     func convertAll() {
         let list = videosToConvert
         guard !list.isEmpty, ensureDestination() else { return }
-        for item in list { start(item) }
+        enqueueVideos(list)
     }
 
     /// Очистить список видео (идущие конвертации останавливаются).
     func clearVideos() {
-        for item in items where item.isConverting { item.cancel() }
+        cancelVideos()
         if let cur = PlayerController.shared.current, cur.isVideo { PlayerController.shared.close() }
         items.removeAll()
         videoScope = .all
@@ -813,5 +948,23 @@ final class Store {
             panel.message = L.chooseVideos
         }
         if panel.runModal() == .OK { add(panel.urls) }
+    }
+}
+
+/// Ограничитель одновременных задач (анализ файлов: ffprobe + превью).
+actor TaskLimiter {
+    static let probes = TaskLimiter(4)
+    private var free: Int
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(_ n: Int) { free = n }
+
+    func acquire() async {
+        if free > 0 { free -= 1; return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        if waiters.isEmpty { free += 1 } else { waiters.removeFirst().resume() }
     }
 }

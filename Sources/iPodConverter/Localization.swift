@@ -347,6 +347,15 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var videosReadyTitle: String { t("Videos ready", "Видео готовы", "Відео готові", "Відэа гатовыя") }
+    static func videosSummary(done: Int, failed: Int) -> String {
+        failed == 0 ? t("Converted: \(done).", "Сконвертировано: \(done).", "Сконвертовано: \(done).", "Сканвертавана: \(done).")
+            : t("Converted: \(done), errors: \(failed).", "Сконвертировано: \(done), с ошибкой: \(failed).",
+                "Сконвертовано: \(done), з помилкою: \(failed).", "Сканвертавана: \(done), з памылкай: \(failed).")
+    }
+    static func batchProgress(_ done: Int, _ total: Int) -> String {
+        t("\(done) of \(total)", "\(done) из \(total)", "\(done) з \(total)", "\(done) з \(total)")
+    }
     static var dropTracks: String { t("Drop tracks or a folder here", "Перетащите треки или папку сюда", "Перетягніть треки або теку сюди", "Перацягніце трэкі або папку сюды") }
     static var orClickTracks: String {
         t("or click to choose · FLAC, OGG, Opus, WMA, APE, MP3…", "или нажмите, чтобы выбрать · FLAC, OGG, Opus, WMA, APE, MP3…",

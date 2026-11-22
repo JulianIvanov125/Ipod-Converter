@@ -181,14 +181,26 @@ struct ContentView: View {
             .controlSize(.small)
             .help(L.toLibraryHelp)
 
-            Button {
-                store.convertAll()
-            } label: {
-                Label(store.hasCheckedVideos ? L.convertSelectedN(store.videosToConvert.count) : L.convertN(store.videosToConvert.count),
-                      systemImage: "arrow.triangle.2.circlepath")
+            if let p = store.videoBatchProgress {
+                BatchProgress(done: p.done, total: p.total, fraction: p.fraction)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(store.videosToConvert.isEmpty || store.items.contains { $0.isConverting })
+            if store.isVideoBusy {
+                Button(role: .destructive) {
+                    store.cancelVideos()
+                } label: {
+                    Label(L.stop, systemImage: "stop.fill")
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button {
+                    store.convertAll()
+                } label: {
+                    Label(store.hasCheckedVideos ? L.convertSelectedN(store.videosToConvert.count) : L.convertN(store.videosToConvert.count),
+                          systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.videosToConvert.isEmpty)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -274,7 +286,7 @@ struct IPodTabs: View {
                         } : nil
                     },
                     selected: store.model == m,
-                    canSelect: !store.isBusy,
+                    canSelect: true,
                     canRemove: true,
                     onSelect: { store.model = m },
                     onRemove: {
@@ -380,7 +392,8 @@ struct LanguageMenu: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "globe")
-                Text(lang.current.rawValue.uppercased())
+                // «uk» — код украинского языка, но на кнопке UK путается с Великобританией → показываем UA.
+                Text(lang.current.rawValue == "uk" ? "UA" : lang.current.rawValue.uppercased())
             }
             .font(.system(size: 11, weight: .medium))
         }
@@ -731,6 +744,19 @@ struct ItemCard: View {
                 Spacer()
                 folderButton(enabled: false)
                 playButton
+            case .queued:
+                Label(L.queued, systemImage: "clock")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(action: item.cancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Theme.tint(0.08)))
+                }
+                .buttonStyle(.plain)
+                .help(L.cancel)
             case .converting(let p):
                 ProgressView(value: p)
                     .progressViewStyle(.linear)
@@ -1033,5 +1059,25 @@ enum Fmt {
 
     static func fps(_ f: Double) -> String {
         abs(f - f.rounded()) < 0.01 ? "\(Int(f.rounded())) fps" : String(format: "%.2f fps", f)
+    }
+}
+
+/// Общий прогресс пачки: «12 из 30» и полоска.
+struct BatchProgress: View {
+    let done: Int
+    let total: Int
+    let fraction: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView(value: fraction)
+                .progressViewStyle(.linear)
+                .frame(width: 140)
+            Text(L.batchProgress(done, total))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .fixedSize()
+        }
+        .help("\(Int(fraction * 100))%")
     }
 }

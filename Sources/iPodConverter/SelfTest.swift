@@ -170,6 +170,36 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-batch"), args.count > i + 2 {
+            // Пачка видео через очередь: сколько идёт одновременно, как растёт общий прогресс.
+            // Пишет только во временную папку, в «Музыку» не добавляет; настройки возвращаются как были.
+            let root = URL(fileURLWithPath: args[i + 1])
+            let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+            let domain = Bundle.main.bundleIdentifier ?? "local.ipodconverter"
+            let saved = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
+            Task { @MainActor in
+                let st = Store()
+                st.addToMusic = false
+                st.rootFolder = root
+                st.createFolderStructure()
+                for f in files { let v = VideoItem(url: f); st.items.append(v); await v.load() }
+                st.enqueueVideos(st.items)
+                var maxRunning = 0, log: [String] = []
+                let t0 = Date()
+                while st.isVideoBusy {
+                    let running = st.items.filter { if case .converting = $0.state { return true } else { return false } }.count
+                    maxRunning = max(maxRunning, running)
+                    if let p = st.videoBatchProgress, log.last != "\(p.done)/\(p.total)" { log.append("\(p.done)/\(p.total)") }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                let done = st.items.filter { if case .done = $0.state { return true } else { return false } }.count
+                print("пачка: \(files.count) видео, одновременно максимум \(maxRunning), готово \(done), за \(String(format: "%.1f", Date().timeIntervalSince(t0))) с")
+                print("прогресс: " + log.joined(separator: " → "))
+                UserDefaults.standard.setPersistentDomain(saved, forName: domain)
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-detect") {
             // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
             Task { @MainActor in

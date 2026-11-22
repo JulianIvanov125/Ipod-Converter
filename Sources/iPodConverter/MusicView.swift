@@ -174,6 +174,9 @@ struct MusicSection: View {
             .controlSize(.small)
             .help(L.toMusicHelp)
 
+            if let p = store.musicBatchProgress {
+                BatchProgress(done: p.done, total: p.total, fraction: p.fraction)
+            }
             if store.isMusicBusy {
                 Button(role: .destructive) {
                     store.cancelMusic()
