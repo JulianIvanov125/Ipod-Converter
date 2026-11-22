@@ -14,6 +14,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/iPodConverter "$APP/Contents/MacOS/"
 cp Info.plist "$APP/Contents/"
 [ -f AppIcon.icns ] && cp AppIcon.icns "$APP/Contents/Resources/"
+# Лицензии (GPL-3.0 приложения и компоненты ffmpeg: x264, LAME, mpg123, dav1d) — вместе с бинарниками.
+cp LICENSE THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
 
 # Встроенный ffmpeg (собирается ./build_ffmpeg.sh). Без него приложение возьмёт ffmpeg из Homebrew.
 if [ -x vendor/ffmpeg/ffmpeg ] && [ -x vendor/ffmpeg/ffprobe ]; then
