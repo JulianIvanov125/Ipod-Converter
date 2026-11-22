@@ -183,6 +183,14 @@ struct ContentView: View {
 
             if let p = store.videoBatchProgress {
                 BatchProgress(done: p.done, total: p.total, fraction: p.fraction)
+            } else if let status = store.videoBatchStatus {
+                Label(status.text, systemImage: status.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(status.ok ? Color.green : Color.red)
+                    .lineLimit(1)
+            }
+            if let report = store.videoReport, !store.isVideoBusy {
+                CopyReportButton(text: report)
             }
             if store.isVideoBusy {
                 Button(role: .destructive) {
@@ -804,6 +812,7 @@ struct ItemCard: View {
                     .foregroundStyle(.red)
                     .lineLimit(2)
                     .textSelection(.enabled)
+                CopyReportButton(text: SupportReport.single(model: item.usedModel ?? target, kind: "video", file: item.url, stage: "convert", error: msg))
                 Spacer()
                 folderButton(enabled: false)
                 if item.info != nil { playButton }

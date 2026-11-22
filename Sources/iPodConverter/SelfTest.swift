@@ -174,7 +174,7 @@ enum SelfTest {
             // Пачка видео через очередь: сколько идёт одновременно, как растёт общий прогресс.
             // Пишет только во временную папку, в «Музыку» не добавляет; настройки возвращаются как были.
             let root = URL(fileURLWithPath: args[i + 1])
-            let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+            let files = args[(i + 2)...].filter { !$0.hasPrefix("--") }.map { URL(fileURLWithPath: $0) }
             let domain = Bundle.main.bundleIdentifier ?? "local.ipodconverter"
             let saved = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
             Task { @MainActor in
@@ -183,6 +183,8 @@ enum SelfTest {
                 st.rootFolder = root
                 st.createFolderStructure()
                 for f in files { let v = VideoItem(url: f); st.items.append(v); await v.load() }
+                // «--break»: исходник третьего файла пропадает после анализа — проверяем, как видна ошибка.
+                if args.contains("--break"), files.count > 2 { try? FileManager.default.removeItem(at: files[2]) }
                 st.enqueueVideos(st.items)
                 var maxRunning = 0, log: [String] = []
                 let t0 = Date()
@@ -195,6 +197,8 @@ enum SelfTest {
                 let done = st.items.filter { if case .done = $0.state { return true } else { return false } }.count
                 print("пачка: \(files.count) видео, одновременно максимум \(maxRunning), готово \(done), за \(String(format: "%.1f", Date().timeIntervalSince(t0))) с")
                 print("прогресс: " + log.joined(separator: " → "))
+                print("статус: \(st.videoBatchStatus.map { $0.text } ?? "-")")
+                if let r = st.videoReport { print("--- отчёт ---\n" + r) }
                 UserDefaults.standard.setPersistentDomain(saved, forName: domain)
                 exit(0)
             }

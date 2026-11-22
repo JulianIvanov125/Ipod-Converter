@@ -295,6 +295,11 @@ final class Store {
     }
     /// Итог последней пачки треков (для строки состояния внизу).
     var musicBatchStatus: (text: String, ok: Bool)?
+    /// Отчёт для поддержки по последней пачке треков (только если были ошибки).
+    var musicReport: String?
+    /// То же для видео.
+    var videoBatchStatus: (text: String, ok: Bool)?
+    var videoReport: String?
 
     // Очередь конвертации треков
     @ObservationIgnored private var musicQueue: [TrackItem] = []
@@ -676,35 +681,75 @@ final class Store {
         return (done, musicBatchTotal, min(1, (Double(done) + running) / Double(musicBatchTotal)))
     }
 
+    /// Партия для «Музыки»: по 50 треков за один вызов — длинный список не упирается в лимиты osascript,
+    /// а ошибка в одной партии не теряет остальные. Пользователю лимит не виден.
+    private static let musicChunk = 50
+
     private func finishMusicBatch() {
         let b = batch
         guard b.converted + b.kept + b.failed > 0 else { return }
         let summary = L.musicSummary(converted: b.converted, kept: b.kept, failed: b.failed)
         let notifyFile = b.outputs.first?.0 ?? musicFolder
+        let batchTracks = tracks.filter { musicBatchIDs.contains($0.id) }
+        // Ошибки конвертации: файл и текст ffmpeg.
+        var failures: [SupportReport.Failure] = batchTracks.compactMap { t in
+            if case .failed(let msg) = t.state { return .init(file: t.url.lastPathComponent, stage: "convert", error: msg) }
+            return nil
+        }
+        func report(_ ok: [String]) -> String? {
+            failures.isEmpty ? nil : SupportReport.text(model: b.model, kind: "music", succeeded: ok, total: musicBatchTotal, failures: failures)
+        }
         guard addToMusic, !b.outputs.isEmpty else {
             musicBatchStatus = (summary, b.failed == 0)
+            musicReport = report(b.outputs.map { $0.1.url.lastPathComponent })
             Notifier.notify(title: L.musicReady(b.model.title), body: summary, fileURL: notifyFile)
             return
         }
         musicBatchStatus = (L.addingToMusic, true)
+        musicReport = nil
         Task {
-            do {
-                let items = b.outputs.map { out, t -> MusicLibrary.Item in
+            var added: [String] = []
+            for start in stride(from: 0, to: b.outputs.count, by: Self.musicChunk) {
+                let part = Array(b.outputs[start..<min(start + Self.musicChunk, b.outputs.count)])
+                let items = part.map { out, t -> MusicLibrary.Item in
                     // WAV/AIFF не хранят обложку внутри — ставим её треку в медиатеке.
                     let noEmbeddedArt = ["wav", "aif", "aiff", "aifc"].contains(out.pathExtension.lowercased())
                     return MusicLibrary.Item(file: out, rating: t.rating > 0 ? t.rating : nil,
                                              name: t.info?.title ?? "", artist: t.info?.artist ?? "", album: t.info?.album ?? "",
                                              cover: noEmbeddedArt ? t.fetched?.coverFile : nil)
                 }
-                let pids = try await MusicLibrary.add(items, playlist: b.model.playlistName, asMusicVideo: false)
-                for (pid, entry) in zip(pids, b.outputs) where !pid.isEmpty { entry.1.musicPersistentID = pid }
-                musicBatchStatus = (summary + " · " + L.inMusic(b.model.playlistName), b.failed == 0)
-                Notifier.notify(title: L.musicReady(b.model.title),
-                                body: summary + " " + L.inMusic(b.model.playlistName) + ".", fileURL: notifyFile)
-            } catch {
-                musicBatchStatus = (error.localizedDescription, false)
-                Notifier.notify(title: L.musicReady(b.model.title), body: L.notAddedBody(error.localizedDescription), fileURL: notifyFile)
+                musicBatchStatus = (L.addingToMusicN(start, b.outputs.count), true)
+                do {
+                    let answers = try await MusicLibrary.add(items, playlist: b.model.playlistName, asMusicVideo: false)
+                    for (k, entry) in part.enumerated() {
+                        let t = entry.1
+                        let answer = k < answers.count ? answers[k] : ""
+                        if answer.hasPrefix("ERR:") {
+                            let msg = String(answer.dropFirst(4))
+                            t.musicError = msg
+                            failures.append(.init(file: t.url.lastPathComponent, stage: "add to Music", error: msg))
+                        } else {
+                            t.musicError = nil
+                            if !answer.isEmpty { t.musicPersistentID = answer }
+                            added.append(t.url.lastPathComponent)
+                        }
+                    }
+                } catch {
+                    // Вся партия не прошла (например, нет доступа к «Музыке») — дальше не идём.
+                    let rest = b.outputs[start...]
+                    for (_, t) in rest {
+                        t.musicError = error.localizedDescription
+                        failures.append(.init(file: t.url.lastPathComponent, stage: "add to Music", error: error.localizedDescription))
+                    }
+                    break
+                }
             }
+            let allOK = failures.isEmpty
+            let text = allOK ? summary + " · " + L.inMusic(b.model.playlistName)
+                             : summary + " · " + L.addedToMusicPartial(added.count, b.outputs.count)
+            musicBatchStatus = (text, allOK)
+            musicReport = report(added)
+            Notifier.notify(title: L.musicReady(b.model.title), body: text + ".", fileURL: notifyFile)
         }
     }
 
@@ -783,7 +828,10 @@ final class Store {
 
     /// Модель и настройки фиксируются сразу — можно переключить вкладку iPod и запускать другое.
     func enqueueVideos(_ list: [VideoItem]) {
-        if !isVideoBusy { videoBatch = (0, 0, 0); videoBatchIDs = []; videoBatchModels = [] }
+        if !isVideoBusy {
+            videoBatch = (0, 0, 0); videoBatchIDs = []; videoBatchModels = []
+            videoBatchStatus = nil; videoReport = nil
+        }
         for item in list where !item.isConverting {
             item.state = .queued
             videoQueue.append(VideoJob(item: item, model: model, settings: settings(for: item), root: outputFolder, addToMusic: addToMusic))
@@ -823,9 +871,19 @@ final class Store {
 
     private func finishVideoBatch() {
         let b = videoBatch
+        let batchItems = items.filter { videoBatchIDs.contains($0.id) }
+        let failures: [SupportReport.Failure] = batchItems.compactMap { v in
+            if case .failed(let msg) = v.state { return .init(file: v.url.lastPathComponent, stage: "convert", error: msg) }
+            return nil
+        }
+        let ok = batchItems.compactMap { v -> String? in if case .done = v.state { return v.url.lastPathComponent }; return nil }
+        videoReport = failures.isEmpty ? nil
+            : SupportReport.text(model: videoBatchModels.first ?? model, kind: "video", succeeded: ok, total: b.total, failures: failures)
         if b.total > 1 {
+            let body = L.videosSummary(done: b.finished - b.failed, failed: b.failed)
+            videoBatchStatus = (body, failures.isEmpty)
             let title = videoBatchModels.count == 1 ? L.videoReady(videoBatchModels.first!.title) : L.videosReadyTitle
-            Notifier.notify(title: title, body: L.videosSummary(done: b.finished - b.failed, failed: b.failed), fileURL: outputFolder)
+            Notifier.notify(title: title, body: body, fileURL: outputFolder)
         }
         videoBatch = (0, 0, 0)
         videoBatchIDs = []

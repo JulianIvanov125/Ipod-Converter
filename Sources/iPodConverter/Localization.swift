@@ -347,6 +347,25 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static var copyForSupport: String { t("Copy for support", "Скопировать для поддержки", "Скопіювати для підтримки", "Скапіяваць для падтрымкі") }
+    static var copyForSupportHelp: String {
+        t("Copies what succeeded, where it failed and the error text — send it to the developer.",
+          "Копирует, что прошло, где упало и текст ошибки — отправьте разработчику.",
+          "Копіює, що пройшло, де впало і текст помилки — надішліть розробнику.",
+          "Капіюе, што прайшло, дзе ўпала і тэкст памылкі — дашліце распрацоўшчыку.")
+    }
+    static var copied: String { t("Copied", "Скопировано", "Скопійовано", "Скапіявана") }
+    static func addingToMusicN(_ done: Int, _ total: Int) -> String {
+        t("Adding to Music… \(done) of \(total)", "Добавляю в «Музыку»… \(done) из \(total)",
+          "Додаю в «Музику»… \(done) з \(total)", "Дадаю ў «Музыку»… \(done) з \(total)")
+    }
+    static func addedToMusicPartial(_ done: Int, _ total: Int) -> String {
+        t("added to Music: \(done) of \(total)", "в «Музыку» добавлено \(done) из \(total)",
+          "до «Музики» додано \(done) з \(total)", "у «Музыку» дададзена \(done) з \(total)")
+    }
+    static func notInMusic(_ e: String) -> String {
+        t("Not added to Music: \(e)", "Не добавлен в «Музыку»: \(e)", "Не додано до «Музики»: \(e)", "Не дададзена ў «Музыку»: \(e)")
+    }
     static var videosReadyTitle: String { t("Videos ready", "Видео готовы", "Відео готові", "Відэа гатовыя") }
     static func videosSummary(done: Int, failed: Int) -> String {
         failed == 0 ? t("Converted: \(done).", "Сконвертировано: \(done).", "Сконвертовано: \(done).", "Сканвертавана: \(done).")

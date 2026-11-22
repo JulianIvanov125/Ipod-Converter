@@ -345,6 +345,8 @@ final class TrackItem: Identifiable {
     var rating = 0
     /// Трек в «Музыке» после добавления — чтобы менять там оценку.
     var musicPersistentID: String?
+    /// Не удалось добавить в «Музыку» (текст ошибки) — показываем у трека и в отчёте.
+    var musicError: String?
     /// Что нашлось в интернете для пустых тегов.
     var fetched: FetchedMeta?
     var metaStatus: MetaStatus = .idle

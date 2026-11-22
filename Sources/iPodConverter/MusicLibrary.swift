@@ -37,61 +37,66 @@ enum MusicLibrary {
             set tArtist to item (i + 3) of argv
             set tAlbum to item (i + 4) of argv
             set coverPath to item (i + 5) of argv
-            tell application "Music"
-                set found to {}
-                if tName is not "" then
-                    try
-                        set found to (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
-                    end try
-                end if
-                if (count of found) > 0 then
-                    set t to item 1 of found
-                    try
-                        set location of t to f
-                    end try
-                    set pid to persistent ID of t
-                    if not (exists (some track of pl whose persistent ID is pid)) then
-                        duplicate t to pl
-                    end if
-                else
-                    -- «add» иногда ничего не возвращает (файл уже в медиатеке и т. п.) — тогда ищем трек сами.
-                    set t to missing value
-                    try
-                        set t to add f to pl
-                    end try
-                    if t is missing value and tName is not "" then
-                        delay 0.5
+            -- Каждый трек отдельно: ошибка одного не останавливает остальные, а в ответе видно, какой упал.
+            try
+                tell application "Music"
+                    set found to {}
+                    if tName is not "" then
                         try
-                            set t to item 1 of (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
-                            set pid to persistent ID of t
-                            if not (exists (some track of pl whose persistent ID is pid)) then
-                                duplicate t to pl
-                            end if
+                            set found to (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
                         end try
                     end if
-                end if
-                if t is missing value then
-                    -- Не нашли — пропускаем только этот трек, остальные добавляются.
-                    set end of pids to ""
-                else
-                if asVideo then
-                    try
-                        set media kind of t to music video
-                    end try
-                end if
-                if r > -1 then
-                    try
-                        set rating of t to r
-                    end try
-                end if
-                if coverPath is not "" then
-                    try
-                        set data of artwork 1 of t to (read (POSIX file coverPath) as picture)
-                    end try
-                end if
-                set end of pids to (persistent ID of t)
-                end if
-            end tell
+                    if (count of found) > 0 then
+                        set t to item 1 of found
+                        try
+                            set location of t to f
+                        end try
+                        set pid to persistent ID of t
+                        if not (exists (some track of pl whose persistent ID is pid)) then
+                            duplicate t to pl
+                        end if
+                    else
+                        -- «add» иногда ничего не возвращает (файл уже в медиатеке и т. п.) — тогда ищем трек сами.
+                        set t to missing value
+                        try
+                            set t to add f to pl
+                        end try
+                        if t is missing value and tName is not "" then
+                            delay 0.5
+                            try
+                                set t to item 1 of (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
+                                set pid to persistent ID of t
+                                if not (exists (some track of pl whose persistent ID is pid)) then
+                                    duplicate t to pl
+                                end if
+                            end try
+                        end if
+                    end if
+                    if t is missing value then
+                        -- Не нашли — пропускаем только этот трек, остальные добавляются.
+                        set end of pids to ""
+                    else
+                    if asVideo then
+                        try
+                            set media kind of t to music video
+                        end try
+                    end if
+                    if r > -1 then
+                        try
+                            set rating of t to r
+                        end try
+                    end if
+                    if coverPath is not "" then
+                        try
+                            set data of artwork 1 of t to (read (POSIX file coverPath) as picture)
+                        end try
+                    end if
+                    set end of pids to (persistent ID of t)
+                    end if
+                end tell
+            on error errMsg
+                set end of pids to ("ERR:" & errMsg)
+            end try
             set i to i + 6
         end repeat
         set AppleScript's text item delimiters to linefeed
@@ -148,6 +153,7 @@ enum MusicLibrary {
     }
 
     /// Добавить пачку файлов одним запуском AppleScript; возвращает persistent ID в том же порядке.
+    /// Ответ на каждый трек по порядку: persistent ID, пусто (не нашли) или «ERR:текст ошибки».
     static func add(_ items: [Item], playlist: String, asMusicVideo: Bool) async throws -> [String] {
         guard !items.isEmpty else { return [] }
         let args = items.flatMap { [$0.file.path, "\($0.rating ?? -1)", $0.name, $0.artist, $0.album, $0.cover?.path ?? ""] }

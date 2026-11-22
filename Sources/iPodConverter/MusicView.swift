@@ -162,6 +162,9 @@ struct MusicSection: View {
                     .lineLimit(2)
                     .textSelection(.enabled)
             }
+            if let report = store.musicReport {
+                CopyReportButton(text: report)
+            }
 
             Spacer()
 
@@ -588,6 +591,13 @@ struct TrackRow: View {
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
             case .done, .kept:
+                if let e = track.musicError {
+                    // Сконвертирован, но в «Музыку» не попал.
+                    Image(systemName: "music.note")
+                        .foregroundStyle(.orange)
+                        .help(L.notInMusic(e))
+                    CopyReportButton(text: SupportReport.single(model: model, kind: "music", file: track.url, stage: "add to Music", error: e), compact: true)
+                }
                 Button { onPreview(true) } label: {
                     Image(systemName: "play.circle.fill").foregroundStyle(Color.accentColor)
                 }
@@ -598,6 +608,7 @@ struct TrackRow: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .help(msg)
+                CopyReportButton(text: SupportReport.single(model: model, kind: "music", file: track.url, stage: "convert", error: msg), compact: true)
             }
             // Папка: до конвертации — оригинал, после — готовый файл.
             Button(action: track.revealInFinder) {
