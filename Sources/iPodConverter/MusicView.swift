@@ -6,7 +6,7 @@ private let hairline = Theme.hairline
 
 /// Ширины колонок списка треков.
 private enum Col {
-    static let type: CGFloat = 120
+    static let type: CGFloat = 150
     static let bitrate: CGFloat = 78
     static let size: CGFloat = 70
     static let target: CGFloat = 140
@@ -371,6 +371,8 @@ struct TrackRow: View {
     let onRate: (Int) -> Void
     @State private var confirmRemove = false
     @State private var showFormat = false
+    @State private var showFormatFromType = false
+    @State private var hoverType = false
     @State private var hoverArt = false
     @State private var hoverStar = 0
 
@@ -428,17 +430,34 @@ struct TrackRow: View {
             .help(track.url.path)
 
             if let info = track.info {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.typeLabel)
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 3).fill(Theme.tint(0.07)))
-                    Text(info.detailLabel)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                // Тип файла + ⚙︎: формат на выходе для этого трека.
+                Button { showFormatFromType.toggle() } label: {
+                    HStack(alignment: .center, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(info.typeLabel)
+                                .font(.system(size: 10, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(RoundedRectangle(cornerRadius: 3).fill(Theme.tint(0.07)))
+                            Text(info.detailLabel)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Image(systemName: track.formatOverride != nil ? "gearshape.fill" : "gearshape")
+                            .font(.system(size: 12))
+                            .foregroundStyle(track.formatOverride != nil || hoverType ? Color.accentColor : Color.secondary)
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(hoverType ? Theme.tint(0.06) : Color.clear))
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .onHover { hoverType = $0 }
+                .disabled(track.isActive)
+                .help(L.trackOutToggle)
+                .popover(isPresented: $showFormatFromType, arrowEdge: .bottom) { TrackFormatView(track: track, store: store) }
                 .frame(width: Col.type, alignment: .leading)
 
                 Text(info.bitrate.map { "\($0 / 1000) \(L.kbps)" } ?? "—")
