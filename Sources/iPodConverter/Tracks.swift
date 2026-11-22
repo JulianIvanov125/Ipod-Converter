@@ -64,6 +64,18 @@ enum AudioPlan: Equatable {
     }
 }
 
+/// Свой формат для одного трека (nil у трека — общие настройки).
+struct TrackFormatOverride: Equatable {
+    var choice: AudioFormatChoice
+    var kbps: Int
+    var sampleRate: Int
+
+    @MainActor static func fromGlobal() -> TrackFormatOverride {
+        let g = AudioOutputSettings.shared
+        return TrackFormatOverride(choice: g.choice, kbps: g.kbps, sampleRate: g.sampleRate)
+    }
+}
+
 /// Какой формат хочет получить пользователь.
 enum AudioFormatChoice: String, CaseIterable, Identifiable {
     case auto, aac, mp3, alac
@@ -381,8 +393,15 @@ final class TrackItem: Identifiable {
         }
     }
 
+    /// Свой формат для этого трека (nil — общие настройки «Выход»).
+    var formatOverride: TrackFormatOverride?
+
     func plan(for model: IPodModel) -> AudioPlan? {
-        info.map { AudioRules.plan(for: $0, model: model) }
+        guard let info else { return nil }
+        if let o = formatOverride {
+            return AudioRules.plan(for: info, model: model, choice: o.choice, kbps: o.kbps, rateOverride: o.sampleRate)
+        }
+        return AudioRules.plan(for: info, model: model)
     }
 
     /// Запускает ffmpeg; completion получает готовый файл или nil.

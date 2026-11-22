@@ -28,6 +28,14 @@ enum SelfTest {
                 st.setChecked(st.tracks[0], false); line("Выбранные, сняли одну")
                 st.musicScope = .all; line("Снова Все")
                 st.setAllChecked(false); st.musicScope = .selected; line("Выбранные, ничего не отмечено")
+                // Свой формат одного трека
+                st.tracks[1].formatOverride = TrackFormatOverride(choice: .mp3, kbps: 320, sampleRate: 44100)
+                for t in st.tracks.prefix(3) { print("план \(t.url.lastPathComponent): \(t.plan(for: .classic55G).map { "\($0)" } ?? "-")\(t.formatOverride != nil ? " (свой)" : "")") }
+                // Свои настройки одного видео
+                let v = VideoItem(url: URL(fileURLWithPath: "/x.mkv"))
+                v.outputOverride = VideoOverride(container: .mp4, codec: .hevc, resolution: .hd720, videoKbps: 2500)
+                let sv = st.settings(for: v), sOther = st.settings(for: VideoItem(url: URL(fileURLWithPath: "/y.mkv")))
+                print("видео со своими: \(sv.container.rawValue) \(sv.codecLabel) \(sv.w)×\(sv.h) \(sv.videoKbps)k; остальные: \(sOther.container.rawValue) \(sOther.codecLabel) \(sOther.w)×\(sOther.h)")
                 exit(0)
             }
             return true

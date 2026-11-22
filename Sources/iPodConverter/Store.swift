@@ -20,6 +20,8 @@ final class VideoItem: Identifiable {
     var thumbnail: NSImage?
     /// Отмечено галочкой (режим «Выбранные»).
     var isChecked = false
+    /// Свои настройки выхода для этого видео (nil — общие).
+    var outputOverride: VideoOverride?
     /// Категория и теги (определяются автоматически, пользователь может поправить).
     var meta: VideoMeta?
     /// JPEG-превью во временной папке — вшивается в готовый файл как обложка.
@@ -289,6 +291,13 @@ final class Store {
 
     /// Параметры для выбранной вкладки.
     var currentSettings: EncodeSettings { VideoOutputSettings.shared.apply(to: model.settings(max: maxQuality)) }
+
+    /// Настройки для конкретного видео: его собственные или общие.
+    func settings(for item: VideoItem) -> EncodeSettings {
+        let base = model.settings(max: maxQuality)
+        if let o = item.outputOverride { return o.apply(to: base) }
+        return VideoOutputSettings.shared.apply(to: base)
+    }
     /// Избранные модели — из них строятся вкладки.
     private(set) var favorites: Set<IPodModel> {
         didSet { UserDefaults.standard.set(favorites.map(\.rawValue), forKey: "favorites") }
@@ -679,7 +688,7 @@ final class Store {
     }
 
     private func start(_ item: VideoItem) {
-        item.convert(model: model, settings: currentSettings, videoRoot: outputFolder, addToMusic: addToMusic)
+        item.convert(model: model, settings: settings(for: item), videoRoot: outputFolder, addToMusic: addToMusic)
     }
 
     // MARK: - Выбор и фильтр видео

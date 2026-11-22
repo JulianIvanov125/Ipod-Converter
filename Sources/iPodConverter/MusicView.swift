@@ -38,6 +38,7 @@ struct MusicSection: View {
                         ForEach(store.visibleTracks) { t in
                             TrackRow(
                                 track: t,
+                                store: store,
                                 model: store.model,
                                 showCheckbox: true,
                                 onRemove: { store.removeTrack(t) },
@@ -327,8 +328,33 @@ struct FormatPicker: View {
     }
 }
 
+/// Колонка «Для iPod»: клик — свой формат для этого трека.
+struct TrackTargetButton<Label: View>: View {
+    @Bindable var track: TrackItem
+    let store: Store
+    @ViewBuilder let label: () -> Label
+    @State private var open = false
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            HStack(spacing: 4) {
+                label()
+                Image(systemName: track.formatOverride != nil ? "gearshape.fill" : "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(track.formatOverride != nil ? Color.accentColor : Color.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(track.isActive)
+        .help(L.trackOutToggle)
+        .popover(isPresented: $open, arrowEdge: .bottom) { TrackFormatView(track: track, store: store) }
+    }
+}
+
 struct TrackRow: View {
     @Bindable var track: TrackItem
+    var store: Store
     let model: IPodModel
     let showCheckbox: Bool
     let onRemove: () -> Void
@@ -416,7 +442,9 @@ struct TrackRow: View {
 
                 stars.frame(width: Col.rating, alignment: .leading)
 
-                targetBadge(AudioRules.plan(for: info, model: model), info: info)
+                TrackTargetButton(track: track, store: store) {
+                    targetBadge(track.plan(for: model) ?? .compatible, info: info)
+                }
                     .frame(width: Col.target, alignment: .leading)
             } else {
                 Spacer().frame(width: Col.type + Col.bitrate + Col.size + Col.rating + Col.target + 40)

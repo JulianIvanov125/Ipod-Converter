@@ -27,7 +27,8 @@ struct ContentView: View {
                             ItemCard(
                                 item: item,
                                 model: store.model,
-                                settings: store.currentSettings,
+                                settings: store.settings(for: item),
+                                store: store,
                                 onConvert: { store.convert(item) },
                                 onRemove: { store.remove(item) },
                                 onPreview: { store.playVideo(item, converted: $0) },
@@ -479,6 +480,7 @@ struct ItemCard: View {
     let item: VideoItem
     let model: IPodModel
     let settings: EncodeSettings
+    var store: Store? = nil
     let onConvert: () -> Void
     let onRemove: () -> Void
     let onPreview: (Bool) -> Void
@@ -605,7 +607,9 @@ struct ItemCard: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
 
-            SpecColumn(header: "\(L.after) · \(target.title)" + (ts.isMax ? " · \(L.maximum)" : ""), rows: [
+            SpecColumn(header: "\(L.after) · \(target.title)" + (ts.isMax ? " · \(L.maximum)" : "")
+                            + (item.outputOverride != nil ? " · \(L.customMark)" : ""),
+                       accessory: store.map { st in AnyView(ItemOutputButton(item: item, store: st)) }, rows: [
                 (L.resolution, "\(out.w)×\(out.h)"),
                 (L.quality, "\(ts.codecLabel) · \(Fmt.kbps(ts.videoKbps))"),
                 (L.size, sizePrefix + Fmt.bytes(estimate)),
@@ -858,17 +862,42 @@ struct MetaEditor: View {
     }
 }
 
+/// ⚙︎ в заголовке «После»: настройки выхода только для этого видео.
+struct ItemOutputButton: View {
+    @Bindable var item: VideoItem
+    let store: Store
+    @State private var open = false
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            Image(systemName: item.outputOverride != nil ? "gearshape.fill" : "gearshape")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(item.isConverting)
+        .help(L.itemOutToggle)
+        .popover(isPresented: $open, arrowEdge: .bottom) { ItemOutputView(item: item, store: store) }
+    }
+}
+
 struct SpecColumn: View {
     let header: String
+    var accessory: AnyView? = nil
     let rows: [(String, String)]
     let highlighted: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(header.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .kerning(0.6)
-                .foregroundStyle(highlighted ? Color.accentColor : .secondary)
+            HStack(spacing: 6) {
+                Text(header.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .kerning(0.6)
+                    .foregroundStyle(highlighted ? Color.accentColor : .secondary)
+                if let accessory { accessory }
+            }
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.0)

@@ -32,6 +32,40 @@ enum OutResolution: String, CaseIterable, Identifiable {
     }
 }
 
+/// Поправки к пресету iPod: общие (кнопка «Выход») или для одного видео (⚙︎ в карточке).
+struct VideoOverride: Equatable {
+    var container: VideoContainer = .m4v
+    var codec: VideoCodec = .h264
+    var resolution: OutResolution = .preset
+    var videoKbps = 0       // 0 — как в пресете
+    var audioKbps = 0
+    var sampleRate = 0
+
+    func apply(to base: EncodeSettings) -> EncodeSettings {
+        var s = base
+        s.isCustom = true
+        s.container = container
+        s.codec = codec
+        if let box = resolution.box {
+            s.w = box.w; s.h = box.h
+            // Профиль H.264 — по размеру кадра: старые iPod — Baseline, HD — Main/High.
+            if box.w * box.h <= 640 * 480 { s.profile = "baseline"; s.level = "3.0" }
+            else if box.w * box.h <= 1280 * 720 { s.profile = "main"; s.level = "3.1" }
+            else { s.profile = "high"; s.level = "4.1" }
+            if resolution == .original { s.profile = "high"; s.level = "" }
+            s.fpsMax = box.w * box.h > 640 * 480 ? 60 : 30
+        }
+        if videoKbps > 0 {
+            s.videoKbps = videoKbps
+            s.maxrateKbps = videoKbps * 5 / 4
+            s.bufsizeKbps = s.maxrateKbps * 2
+        }
+        if audioKbps > 0 { s.audioKbps = audioKbps }
+        if sampleRate > 0 { s.audioRate = sampleRate }
+        return s
+    }
+}
+
 @MainActor
 @Observable
 final class VideoOutputSettings {
@@ -75,30 +109,15 @@ final class VideoOutputSettings {
         videoKbps = 0; audioKbps = 0; sampleRate = 0
     }
 
+    /// Общие поправки как структура (для «Применить к одному видео»).
+    var asOverride: VideoOverride {
+        VideoOverride(container: container, codec: codec, resolution: resolution,
+                      videoKbps: videoKbps, audioKbps: audioKbps, sampleRate: sampleRate)
+    }
+
     /// Пресет iPod с поправками пользователя.
     func apply(to base: EncodeSettings) -> EncodeSettings {
-        guard enabled else { return base }
-        var s = base
-        s.isCustom = true
-        s.container = container
-        s.codec = codec
-        if let box = resolution.box {
-            s.w = box.w; s.h = box.h
-            // Профиль H.264 — по размеру кадра: старые iPod — Baseline, HD — Main/High.
-            if box.w * box.h <= 640 * 480 { s.profile = "baseline"; s.level = "3.0" }
-            else if box.w * box.h <= 1280 * 720 { s.profile = "main"; s.level = "3.1" }
-            else { s.profile = "high"; s.level = "4.1" }
-            if resolution == .original { s.profile = "high"; s.level = "" }
-            s.fpsMax = box.w * box.h > 640 * 480 ? 60 : 30
-        }
-        if videoKbps > 0 {
-            s.videoKbps = videoKbps
-            s.maxrateKbps = videoKbps * 5 / 4
-            s.bufsizeKbps = s.maxrateKbps * 2
-        }
-        if audioKbps > 0 { s.audioKbps = audioKbps }
-        if sampleRate > 0 { s.audioRate = sampleRate }
-        return s
+        enabled ? asOverride.apply(to: base) : base
     }
 
     /// Чем настройки выходят за пределы того, что играет iPod (пусто — всё в пределах).

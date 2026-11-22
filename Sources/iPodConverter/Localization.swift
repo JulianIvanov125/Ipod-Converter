@@ -247,6 +247,12 @@ enum L {
     static var connectedHelp: String {
         t("This iPod is connected now", "Этот iPod сейчас подключён", "Цей iPod зараз підключений", "Гэты iPod зараз падключаны")
     }
+    static var itemOutToggle: String { t("Custom settings for this video", "Свои настройки для этого видео", "Свої налаштування для цього відео", "Свае налады для гэтага відэа") }
+    static var trackOutToggle: String { t("Custom format for this track", "Свой формат для этого трека", "Свій формат для цього треку", "Свой фармат для гэтага трэка") }
+    static var itemOutHint: String { t("Off — the general Output settings are used", "Выключено — используются общие настройки «Выход»", "Вимкнено — використовуються загальні налаштування «Вихід»", "Выключана — выкарыстоўваюцца агульныя налады «Выхад»") }
+    static func applyToChecked(_ n: Int) -> String { t("Apply to checked (\(n))", "Применить к выбранным (\(n))", "Застосувати до вибраних (\(n))", "Прымяніць да выбраных (\(n))") }
+    static var sameAsAll: String { t("Same as all", "Как у всех", "Як у всіх", "Як ва ўсіх") }
+    static var customMark: String { t("custom", "свои", "свої", "свае") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }
