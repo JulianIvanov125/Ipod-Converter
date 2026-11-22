@@ -11,3 +11,6 @@ build/
 .swiftpm/
 *.xcodeproj/xcuserdata/
 DerivedData/
+
+# Встраиваемый ffmpeg (собирается build_ffmpeg.sh)
+vendor/
