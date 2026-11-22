@@ -347,6 +347,22 @@ enum L {
           "Фармат, які iPod не грае → AAC 256 кбіт/с (кодэр Apple).")
     }
     static var queued: String { t("Queued", "В очереди", "У черзі", "У чарзе") }
+    static func storageLine(free: String, total: String) -> String {
+        t("iPod: \(free) free of \(total)", "iPod: свободно \(free) из \(total)", "iPod: вільно \(free) з \(total)", "iPod: вольна \(free) з \(total)")
+    }
+    static func storageNeed(_ n: String) -> String { t("needs ≈ \(n)", "нужно ≈ \(n)", "потрібно ≈ \(n)", "трэба ≈ \(n)") }
+    static func storageNotEnough(_ n: String) -> String {
+        t("Not enough space: about \(n) more is needed — remove something from the iPod or convert fewer files.",
+          "Места не хватит: нужно ещё около \(n) — удалите что-то с iPod или выберите меньше файлов.",
+          "Місця не вистачить: потрібно ще близько \(n) — видаліть щось з iPod або виберіть менше файлів.",
+          "Месца не хопіць: трэба яшчэ каля \(n) — выдаліце нешта з iPod або выберыце менш файлаў.")
+    }
+    static func storageHelp(_ name: String) -> String {
+        t("Free space on “\(name)” right now and the approximate size of the files after conversion. Syncing copies them to the iPod.",
+          "Свободное место на «\(name)» сейчас и примерный размер файлов после конвертации. При синхронизации они копируются на iPod.",
+          "Вільне місце на «\(name)» зараз і приблизний розмір файлів після конвертації. Під час синхронізації вони копіюються на iPod.",
+          "Вольнае месца на «\(name)» зараз і прыкладны памер файлаў пасля канвертацыі. Пры сінхранізацыі яны капіююцца на iPod.")
+    }
     static var toMusicLibrary: String { t("Add to Music", "В «Музыку»", "У «Музику»", "У «Музыку»") }
     static var toMusicLibraryHelp: String {
         t("After conversion tracks go into your Music library — with covers and tags, ready to sync to the iPod.",

@@ -243,7 +243,7 @@ enum SelfTest {
                              ms { _ = IPodDetector.usbDevices() }, ms { _ = IPodDetector.volumeAccessDenied(usb: usb) },
                              ms { _ = IPodDetector.mountedIPods() }, ms { _ = IPodDetector.detect(usb: usb) }))
                 print(String(format: "опрос iPod: %.1f мс за раз; найдено: %@", Date().timeIntervalSince(t0) * 100,
-                             d.devices.map { "\($0.model.rawValue) «\($0.name ?? "-")»" }.joined(separator: ", ")))
+                             d.devices.map { "\($0.model.rawValue) «\($0.name ?? "-")» свободно \(Fmt.bytes($0.freeBytes ?? 0)) из \(Fmt.bytes($0.totalBytes ?? 0))" }.joined(separator: ", ")))
                 exit(0)
             }
         }

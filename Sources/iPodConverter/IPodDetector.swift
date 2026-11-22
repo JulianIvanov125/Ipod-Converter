@@ -13,6 +13,9 @@ struct ConnectedIPod: Equatable, Identifiable {
     var serial: String
     /// 5G и 5.5G неотличимы автоматически — модель можно уточнить вручную.
     var ambiguous: Bool
+    /// Диск iPod: свободно и всего (байты); nil — iPod не смонтирован или нет доступа.
+    var freeBytes: Int64? = nil
+    var totalBytes: Int64? = nil
 }
 
 /// Находит подключённые iPod: по USB (видно всегда, даже без «режима диска»), а с диска iPod
@@ -183,7 +186,14 @@ final class IPodDetector {
             } else if ambiguous && preferEnhanced5G {
                 model = .classic55G
             }
-            result.append(ConnectedIPod(model: model, name: vol?.name, serial: dev.serial, ambiguous: ambiguous))
+            var storage: (free: Int64, total: Int64)?
+            if let path = vol?.path,
+               let r = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.volumeAvailableCapacityKey, .volumeTotalCapacityKey]),
+               let free = r.volumeAvailableCapacity, let total = r.volumeTotalCapacity {
+                storage = (Int64(free), Int64(total))
+            }
+            result.append(ConnectedIPod(model: model, name: vol?.name, serial: dev.serial, ambiguous: ambiguous,
+                                        freeBytes: storage?.free, totalBytes: storage?.total))
         }
         return result.sorted { (IPodModel.allCases.firstIndex(of: $0.model) ?? 0) < (IPodModel.allCases.firstIndex(of: $1.model) ?? 0) }
     }

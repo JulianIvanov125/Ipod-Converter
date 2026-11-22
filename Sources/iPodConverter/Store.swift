@@ -916,6 +916,24 @@ final class Store {
         return (videoBatch.finished, videoBatch.total, min(1, (Double(videoBatch.finished) + running) / Double(videoBatch.total)))
     }
 
+    // MARK: - Место на iPod
+
+    /// Сколько примерно займёт на iPod то, что уйдёт в конвертацию по кнопке внизу (для текущего раздела).
+    var pendingBytes: Int64 {
+        switch section {
+        case .music:
+            return convertibleTracks.reduce(0) { sum, t in
+                guard let info = t.info, let plan = t.plan(for: model) else { return sum }
+                return sum + AudioRules.estimatedBytes(plan, info: info)
+            }
+        case .videos:
+            return videosToConvert.reduce(0) { sum, v in
+                guard let info = v.info else { return sum }
+                return sum + settings(for: v).estimatedBytes(for: info)
+            }
+        }
+    }
+
     /// Остановить все видео: и ждущие в очереди, и идущие.
     func cancelVideos() {
         let queued = videoQueue

@@ -168,6 +168,7 @@ struct MusicSection: View {
 
             Spacer()
 
+            IPodStorageBadge(store: store)
             SyncGuideButton(store: store)
             Toggle(isOn: $store.addToMusic) {
                 Text(L.toMusicLibrary)

@@ -172,6 +172,7 @@ struct ContentView: View {
 
             Spacer()
 
+            IPodStorageBadge(store: store)
             SyncGuideButton(store: store)
             Toggle(isOn: $store.addToMusic) {
                 Text(L.toLibrary(store.model.playlistName))
@@ -1088,5 +1089,33 @@ struct BatchProgress: View {
                 .fixedSize()
         }
         .help("\(Int(fraction * 100))%")
+    }
+}
+
+/// Место на подключённом iPod выбранной вкладки и хватит ли его на то, что сейчас сконвертируем.
+struct IPodStorageBadge: View {
+    @Bindable var store: Store
+
+    var body: some View {
+        if let dev = IPodDetector.shared.device(for: store.model), let free = dev.freeBytes, let total = dev.totalBytes {
+            let need = store.pendingBytes
+            let fits = need <= free
+            HStack(spacing: 5) {
+                Image(systemName: need == 0 ? "internaldrive" : fits ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(need == 0 ? Color.secondary : fits ? Color.green : Color.red)
+                Text(L.storageLine(free: Fmt.bytes(free), total: Fmt.bytes(total)))
+                    .foregroundStyle(.secondary)
+                if need > 0 {
+                    Text("· " + L.storageNeed(Fmt.bytes(need)))
+                        .foregroundStyle(fits ? Color.secondary : Color.red)
+                }
+            }
+            .font(.system(size: 11).monospacedDigit())
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .layoutPriority(-1)          // узкое окно — сжимаемся с многоточием, раскладку не распираем
+            .help(fits ? L.storageHelp(dev.name ?? store.model.title)
+                       : L.storageNotEnough(Fmt.bytes(need - free)) + "\n" + L.storageHelp(dev.name ?? store.model.title))
+        }
     }
 }
