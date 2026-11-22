@@ -160,6 +160,7 @@ struct ContentView: View {
 
             Spacer()
 
+            SyncGuideButton(store: store)
             Toggle(isOn: $store.addToMusic) {
                 Text(L.toLibrary(store.model.playlistName))
                     .font(.system(size: 12))

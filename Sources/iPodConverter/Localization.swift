@@ -253,6 +253,35 @@ enum L {
     static func applyToChecked(_ n: Int) -> String { t("Apply to checked (\(n))", "Применить к выбранным (\(n))", "Застосувати до вибраних (\(n))", "Прымяніць да выбраных (\(n))") }
     static var sameAsAll: String { t("Same as all", "Как у всех", "Як у всіх", "Як ва ўсіх") }
     static var customMark: String { t("custom", "свои", "свої", "свае") }
+    // Подсказка по синхронизации
+    static var syncGuideTitle: String { t("How to sync with your iPod", "Как синхронизировать с iPod", "Як синхронізувати з iPod", "Як сінхранізаваць з iPod") }
+    static func syncConnected(_ m: String) -> String { t("Connected: \(m)", "Подключён: \(m)", "Підключено: \(m)", "Падключаны: \(m)") }
+    static var syncStep1: String {
+        t("Connect the iPod and select it in the Finder sidebar (Locations).",
+          "Подключите iPod и выберите его в боковой панели Finder (раздел «Места»).",
+          "Підключіть iPod і виберіть його в бічній панелі Finder (розділ «Місця»).",
+          "Падключыце iPod і выберыце яго ў бакавой панэлі Finder (раздзел «Месцы»).")
+    }
+    static func syncStep2(_ p: String) -> String {
+        t("Music tab: turn on “Sync music”, choose “Selected playlists…” and tick “\(p)”.",
+          "Вкладка «Музыка»: включите синхронизацию, выберите «Выбранные плейлисты…» и отметьте «\(p)».",
+          "Вкладка «Музика»: увімкніть синхронізацію, виберіть «Вибрані плейлисти…» і позначте «\(p)».",
+          "Укладка «Музыка»: уключыце сінхранізацыю, выберыце «Выбраныя плэйлісты…» і адзначце «\(p)».")
+    }
+    static func syncStep3(_ p: String) -> String {
+        t("Movies and TV Shows tabs: turn on sync and tick the films and series you converted (or the “\(p)” playlist, if Finder offers it).",
+          "Вкладки «Фильмы» и «Телешоу»: включите синхронизацию и отметьте сконвертированные фильмы и сериалы (или плейлист «\(p)», если Finder его предлагает).",
+          "Вкладки «Фільми» та «Телешоу»: увімкніть синхронізацію й позначте сконвертовані фільми та серіали (або плейлист «\(p)», якщо Finder його пропонує).",
+          "Укладкі «Фільмы» і «Тэлешоу»: уключыце сінхранізацыю і адзначце канвертаваныя фільмы і серыялы (або плэйліст «\(p)», калі Finder яго прапануе).")
+    }
+    static var syncStep4: String { t("Click “Sync” (or “Apply”).", "Нажмите «Синхронизировать» (или «Применить»).", "Натисніть «Синхронізувати» (або «Застосувати»).", "Націсніце «Сінхранізаваць» (або «Ужыць»).") }
+    static var syncNote: String {
+        t("Each iPod gets its own playlist, so music for one iPod doesn't end up on another. Covers and ratings come from the Music app.",
+          "У каждого iPod свой плейлист, поэтому музыка для одного iPod не попадёт на другой. Обложки и оценки iPod берёт из «Музыки».",
+          "У кожного iPod свій плейлист, тож музика для одного iPod не потрапить на інший. Обкладинки й оцінки iPod бере з «Музики».",
+          "У кожнага iPod свой плэйліст, таму музыка для аднаго iPod не трапіць на іншы. Вокладкі і ацэнкі iPod бярэ з «Музыкі».")
+    }
+    static var syncOpenFinder: String { t("Open Finder", "Открыть Finder", "Відкрити Finder", "Адкрыць Finder") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

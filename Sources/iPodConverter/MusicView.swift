@@ -161,6 +161,7 @@ struct MusicSection: View {
 
             Spacer()
 
+            SyncGuideButton(store: store)
             Toggle(isOn: $store.addToMusic) {
                 Text(L.toMusic(store.model.playlistName))
                     .font(.system(size: 12))
