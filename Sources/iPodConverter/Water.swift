@@ -15,8 +15,9 @@ final class WaterSurface {
     private var carry: Double = 0
     /// Шагов модели в секунду — задаёт скорость волн.
     static let stepsPerSecond = 110.0
-    /// Затухание за шаг: волна пересекает экран и гаснет за ~3 с.
-    static let damping: Float = 0.986
+    /// Затухание за шаг: 0.986 — волна пересекает экран и гаснет за ~3 с.
+    /// Меняется с динамикой песни: в тихой части вода быстро успокаивается, в громкой волны живут дольше.
+    var damping: Float = 0.986
 
     /// Размер сетки под пропорции экрана (по ширине ~400 ячеек — дальше картинка сглаживается).
     func resize(to size: CGSize) {
@@ -65,7 +66,7 @@ final class WaterSurface {
     }
 
     private func step() {
-        let damp = Self.damping
+        let damp = damping
         cur.withUnsafeBufferPointer { c in
             prev.withUnsafeMutableBufferPointer { p in
                 for y in 1..<(h - 1) {

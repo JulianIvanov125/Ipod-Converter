@@ -204,6 +204,32 @@ enum SelfTest {
             }
             return true
         }
+        if let i = args.firstIndex(of: "--selftest-dynamics"), args.count > i + 1 {
+            // По секундам: динамика песни и сколько капель упало (тихая часть → громкая).
+            let f = URL(fileURLWithPath: args[i + 1])
+            Task { @MainActor in
+                let pc = PlayerController.shared
+                // Не mute: при выключенном звуке macOS через несколько секунд перестаёт прогонять звук через анализатор.
+                pc.player.volume = 0.001
+                pc.play([PlayEntry(id: "dyn", url: f, title: "Test", subtitle: "", artwork: nil, isVideo: false)], startAt: 0)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                let sm = LevelSmoother(), field = DropField()
+                let t0 = Date().timeIntervalSinceReferenceDate
+                var sec = 0, lastSpawned = 0, line: [String] = []
+                while Date().timeIntervalSinceReferenceDate - t0 < 12 {
+                    let t = Date().timeIntervalSinceReferenceDate
+                    field.spawn(sm.update(time: t), time: t, intensity: sm.intensity)
+                    if Int(t - t0) > sec {
+                        let raw = AudioAnalyzer.shared.snapshot(); line.append(String(format: "%d с: динамика %.2f, капель %d, дБ %.1f, макс. полоса %.2f, играет %d, позиция %.1f, ошибка %@", sec + 1, sm.intensity, field.spawned - lastSpawned, sm.loudNow, raw.max() ?? 0, pc.isPlaying ? 1 : 0, pc.currentTime, pc.error ?? "-"))
+                        lastSpawned = field.spawned; sec = Int(t - t0)
+                    }
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
+                print(line.joined(separator: "\n"))
+                exit(0)
+            }
+            return true
+        }
         if args.contains("--selftest-detect") {
             // Сколько стоит один опрос iPod (то, что таймер делает каждые 2 с).
             Task { @MainActor in

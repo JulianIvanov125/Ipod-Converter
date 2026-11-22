@@ -138,6 +138,14 @@ final class LevelSmoother {
     private var lastTime: Double = 0
     /// Удар баса для цвета: быстро нарастает и гаснет ~0.5 с — толчок без вспышки.
     private(set) var kick: Float = 0
+    /// Динамика песни 0…1: насколько сейчас громко относительно последних ~20 с этого трека.
+    /// Тихий куплет — около 0, громкий припев — около 1; меняется плавно (~1 с).
+    private(set) var intensity: Float = 0.5
+    private(set) var loudNow: Float = -120
+    private var loudPeak: Float = -120
+    /// Сколько секунд трек уже звучит (первые 1.5 с — «прислушиваемся», динамика посередине).
+    private var heard: Double = 0
+    private var silentFor: Double = 0
     /// Подписи частот на скачках (эквалайзер): полоса → (время, уровень).
     private(set) var labels: [Int: (t: Double, v: Float)] = [:]
 
@@ -225,6 +233,28 @@ final class LevelSmoother {
             flowPhase[k] += dt * (0.27 + Double(flowLevel[k]) * 2.25 + Double(kick) * (k == 0 ? 3.5 : k == 1 ? 1.8 : 0.8))
         }
         kick += (pulse - kick) * (pulse > kick ? kickUp : kickDown)
+
+        // Динамика: громкость в дБ (без обрезки, по энергии всех полос), сглаженная ~1 с — биты не раскачивают.
+        // Сравниваем с громким пиком последних секунд: на пике — 1, на 12 дБ тише — 0.
+        // Пик медленно опускается (0.5 дБ/с), поэтому «громко» — это громко для этой песни, а не вообще.
+        func tau(_ sec: Double) -> Float { Float(1 - exp(-dt / sec)) }
+        let energy = db.reduce(Float(0)) { $0 + pow(10, $1 / 10) } / Float(max(db.count, 1))
+        let loud = 10 * log10(max(energy, 1e-12))
+        // Тишина дольше секунды (пауза, новый трек) — начинаем заново.
+        silentFor = loud < -75 ? silentFor + dt : 0
+        if silentFor > 1 { loudNow = -120; heard = 0 }
+        if loudNow < -100 { loudNow = loud }
+        loudNow += (loud - loudNow) * tau(loud > loudNow ? 0.5 : 1.2)
+        if loud > -75 { heard += dt }
+        let target: Float
+        if heard < 1.5 {
+            loudPeak = loudNow + 4                       // ещё слушаем трек — середина шкалы
+            target = loud < -75 ? 0 : 0.5
+        } else {
+            loudPeak = max(loudNow, loudPeak - Float(dt) * 0.35)
+            target = loudNow < -75 ? 0 : max(0, min(1, 1 - (loudPeak - loudNow) / 12))
+        }
+        intensity += (target - intensity) * tau(target > intensity ? 0.4 : 1.2)
         return onsets
     }
 
@@ -271,21 +301,24 @@ final class DropField {
 
     /// Возвращает капли, появившиеся в этом кадре.
     @discardableResult
-    func spawn(_ onsets: [(band: Int, strength: Float)], time: Double) -> [Drop] {
+    func spawn(_ onsets: [(band: Int, strength: Float)], time: Double, intensity: Float = 0.5) -> [Drop] {
+        let i = CGFloat(intensity)
         drops.removeAll { time - $0.born > Self.life }
         // Вид сверху: капля падает в случайное место всей площади. Не чаще ~3 в секунду —
         // берём только самый сильный скачок кадра, удар баса даёт каплю крупнее.
         guard time >= next else { return [] }
         let before = drops.count
         // До двух капель за раз (бас и самый сильный звук сверху) — в разных местах экрана.
-        for o in onsets.sorted(by: { $0.strength > $1.strength }).prefix(2) {
+        // Громкая часть песни — до двух капель за раз и крупнее; тихая — по одной, мелкие.
+        for o in onsets.sorted(by: { $0.strength > $1.strength }).prefix(intensity > 0.45 ? 2 : 1) {
             let bass = o.band < 0
-            let strength = CGFloat(o.strength) * (bass ? 1.3 : 0.85)
-            guard strength > 0.2 else { continue }
+            let strength = CGFloat(o.strength) * (bass ? 1.3 : 0.85) * (0.55 + 0.75 * i)
+            guard strength > 0.2 + (1 - i) * 0.12 else { continue }
             drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
                               strength: min(1.25, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
                               colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
-            next = time + (bass ? 0.15 : 0.2)
+            // Пауза между каплями: в припеве короче, в куплете длиннее.
+            next = time + (bass ? 0.15 : 0.2) * Double(1.8 - 1.0 * i)
             spawned += 1
         }
         let fresh = Array(drops[before...])
@@ -431,7 +464,9 @@ struct AudioVisualizer: View {
             let v = c.rgb
             return v * (0.95 / max(0.2, max(v.x, max(v.y, v.z))))     // яркий тон того же цвета
         }
-        for d in field.spawn(onsets, time: t) {
+        let i = smoother.intensity
+        water.damping = 0.978 + 0.011 * i
+        for d in field.spawn(onsets, time: t, intensity: i) {
             // Тон капли — по высоте звука: низы, середина (голос), верха — разные цвета обложки.
             let color: SIMD3<Float>
             let radius: Float
@@ -443,11 +478,11 @@ struct AudioVisualizer: View {
                 color = tones[0]
                 radius = 6.5
             }
-            water.drop(x: d.x, y: d.y, strength: Float(d.strength), radius: radius, color: color)
+            water.drop(x: d.x, y: d.y, strength: Float(d.strength), radius: radius * (0.8 + 0.5 * i), color: color)
         }
         water.advance(to: t)
         let deep = colors.background.rgb * 0.8 + SIMD3<Float>(repeating: 0.03)
-        if let img = water.image(deep: deep, glow: smoother.kick) {
+        if let img = water.image(deep: deep, glow: smoother.kick + i * 0.35) {
             ctx.draw(Image(decorative: img, scale: 1).resizable().interpolation(.high), in: CGRect(origin: .zero, size: size))
         }
     }
