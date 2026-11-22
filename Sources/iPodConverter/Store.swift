@@ -221,9 +221,7 @@ final class Store {
 
     var items: [VideoItem] = []
     var tracks: [TrackItem] = []
-    var section: Section {
-        didSet { UserDefaults.standard.set(section.rawValue, forKey: "section") }
-    }
+    var section: Section
     var musicScope: MusicScope = .all
     /// Поиск по трекам (латиница = кириллица, неверная раскладка).
     var trackSearch = ""
@@ -434,7 +432,8 @@ final class Store {
     }
 
     init() {
-        section = Section(rawValue: UserDefaults.standard.string(forKey: "section") ?? "") ?? .videos
+        // При запуске всегда открывается «Музыка».
+        section = .music
         rootFolder = Self.savedFolder("rootFolder", default: Self.defaultRoot)
         // Папку уже выбирали в прошлых версиях, если она сохранена.
         hasChosenRoot = UserDefaults.standard.bool(forKey: "rootChosen")
