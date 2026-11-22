@@ -2,23 +2,36 @@ import Foundation
 import IOKit
 import IOKit.usb
 import Observation
+import SQLite3
 
-/// Находит подключённые iPod: по USB (видно всегда, даже без «режима диска»)
-/// и уточняет модель по SysInfo, если iPod смонтирован как диск.
+/// Подключённый iPod: модель для конвертации, имя (как в Finder) и серийный номер USB (FireWire GUID).
+struct ConnectedIPod: Equatable, Identifiable {
+    var id: String { serial.isEmpty ? model.rawValue : serial }
+    var model: IPodModel
+    /// «Julian’s iPod» — из главного плейлиста iTunesDB; nil, если iPod не смонтирован как диск.
+    var name: String?
+    var serial: String
+    /// 5G и 5.5G неотличимы автоматически — модель можно уточнить вручную.
+    var ambiguous: Bool
+}
+
+/// Находит подключённые iPod: по USB (видно всегда, даже без «режима диска»), а с диска iPod
+/// берёт номер модели (SysInfo) и имя устройства (iTunesDB).
 /// USB-идентификаторы Apple (idVendor 0x05AC) — по открытым спискам (libgpod, usb.ids);
-/// на реальных устройствах проверены не все.
+/// 0x1209 (5G/5.5G) и 0x1267 (nano 7) проверены на реальных устройствах.
 @MainActor
 @Observable
 final class IPodDetector {
     static let shared = IPodDetector()
 
-    /// Подключённые сейчас модели (без повторов, в порядке каталога).
-    private(set) var connected: [IPodModel] = []
-    /// Модель, которую пользователь держит во вкладках: подсказка, когда 5G и 5.5G неотличимы.
-    @ObservationIgnored var preferEnhanced5G: () -> Bool = { false }
-    /// Вызывается для каждой модели, которая только что появилась.
+    private(set) var devices: [ConnectedIPod] = []
+    /// Подключённые модели (без повторов, в порядке каталога).
+    var connected: [IPodModel] { IPodModel.allCases.filter { m in devices.contains { $0.model == m } } }
+
     @ObservationIgnored var onConnect: ((IPodModel) -> Void)?
     @ObservationIgnored var onDisconnect: ((IPodModel) -> Void)?
+    /// Без ручного уточнения неоднозначный 5G/5.5G берём по вкладкам пользователя.
+    @ObservationIgnored var preferEnhanced5G: () -> Bool = { false }
     @ObservationIgnored private var timer: Timer?
 
     private init() {}
@@ -32,60 +45,177 @@ final class IPodDetector {
         }
     }
 
-    func isConnected(_ m: IPodModel) -> Bool { connected.contains(m) }
+    func isConnected(_ m: IPodModel) -> Bool { devices.contains { $0.model == m } }
+    func device(for m: IPodModel) -> ConnectedIPod? { devices.first { $0.model == m } }
 
     func refresh() {
-        let found = Self.detect(preferEnhanced5G: preferEnhanced5G())
-        guard found != connected else { return }
+        let found = Self.detect(preferEnhanced5G: preferEnhanced5G(), overrides: Self.savedOverrides())
+        guard found != devices else { return }
         let old = Set(connected)
-        connected = found
-        for m in found where !old.contains(m) { onConnect?(m) }
-        for m in old where !found.contains(m) { onDisconnect?(m) }
+        devices = found
+        let now = Set(connected)
+        for m in connected where !old.contains(m) { onConnect?(m) }
+        for m in old where !now.contains(m) { onDisconnect?(m) }
+    }
+
+    // MARK: Ручное уточнение модели (по серийному номеру устройства)
+
+    nonisolated static func savedOverrides() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: "deviceModels") as? [String: String] ?? [:]
+    }
+
+    /// «Это iPod 5.5G» — запоминаем для этого устройства.
+    func setModel(_ m: IPodModel, for device: ConnectedIPod) {
+        guard !device.serial.isEmpty else { return }
+        var o = Self.savedOverrides()
+        o[device.serial] = m.rawValue
+        UserDefaults.standard.set(o, forKey: "deviceModels")
+        refresh()
     }
 
     // MARK: Определение
 
-    nonisolated static func detect(preferEnhanced5G: Bool = false) -> [IPodModel] {
-        let models = mountedModelNumbers()
-        var found = usbProductIDs().compactMap { model(forUSB: $0, modelNumbers: models) }
-        // 5G и 5.5G по USB одинаковы; без SysInfo с номером модели берём ту, что у пользователя во вкладках.
-        if preferEnhanced5G, models.isEmpty, let i = found.firstIndex(of: .classic5G) { found[i] = .classic55G }
-        return IPodModel.allCases.filter { found.contains($0) }
+    nonisolated static func detect(preferEnhanced5G: Bool = false, overrides: [String: String] = [:]) -> [ConnectedIPod] {
+        let volumes = mountedIPods()
+        var usedVolumes = Set<String>()
+        var result: [ConnectedIPod] = []
+        // Только iPod (хабы, мониторы и прочие устройства Apple не мешают сопоставлению с дисками).
+        let usb = usbDevices().filter { model(forUSB: $0.pid, modelNumbers: []) != nil }
+        for dev in usb {
+            // Диск этого iPod: по GUID из SysInfo; иначе — единственный «незанятый» iPod-диск.
+            var vol = volumes.first { !$0.guid.isEmpty && $0.guid == dev.serial }
+            if vol == nil {
+                let free = volumes.filter { $0.guid.isEmpty && !usedVolumes.contains($0.path) }
+                if free.count == 1 && usb.filter({ u in !volumes.contains { $0.guid == u.serial } }).count == 1 { vol = free.first }
+            }
+            if let v = vol { usedVolumes.insert(v.path) }
+            guard var model = model(forUSB: dev.pid, modelNumbers: vol.map { [$0.modelNumber] } ?? []) else { continue }
+            let ambiguous = dev.pid == 0x1209 && (vol?.modelNumber ?? "").isEmpty
+            if let o = overrides[dev.serial], let m = IPodModel(rawValue: o) {
+                model = m
+            } else if ambiguous && preferEnhanced5G {
+                model = .classic55G
+            }
+            result.append(ConnectedIPod(model: model, name: vol?.name, serial: dev.serial, ambiguous: ambiguous))
+        }
+        return result.sorted { (IPodModel.allCases.firstIndex(of: $0.model) ?? 0) < (IPodModel.allCases.firstIndex(of: $1.model) ?? 0) }
     }
 
-    /// idProduct всех USB-устройств Apple.
-    nonisolated static func usbProductIDs() -> [Int] {
-        guard let matching = IOServiceMatching("IOUSBHostDevice") as NSMutableDictionary? else { return [] }
-        matching["idVendor"] = 0x05AC
+    /// USB-устройства Apple: idProduct и серийный номер (у iPod это FireWire GUID).
+    /// Фильтр по idVendor в самом запросе IOKit не срабатывает — проверяем производителя здесь.
+    nonisolated static func usbDevices() -> [(pid: Int, serial: String)] {
+        guard let matching = IOServiceMatching("IOUSBHostDevice") else { return [] }
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return [] }
         defer { IOObjectRelease(iterator) }
-        var ids: [Int] = []
+        var out: [(Int, String)] = []
         while true {
-            let service = IOIteratorNext(iterator)
-            if service == 0 { break }
-            if let pid = IORegistryEntryCreateCFProperty(service, "idProduct" as CFString, kCFAllocatorDefault, 0)?
-                .takeRetainedValue() as? Int {
-                ids.append(pid)
-            }
-            IOObjectRelease(service)
+            let s = IOIteratorNext(iterator)
+            if s == 0 { break }
+            defer { IOObjectRelease(s) }
+            func prop(_ key: String) -> Any? { IORegistryEntryCreateCFProperty(s, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() }
+            guard (prop("idVendor") as? Int) == 0x05AC, let pid = prop("idProduct") as? Int else { continue }
+            let serial = (prop("USB Serial Number") as? String) ?? (prop("kUSBSerialNumberString") as? String) ?? ""
+            out.append((pid, serial.uppercased()))
         }
-        return ids
+        return out
     }
 
-    /// Номера моделей («MA446») из SysInfo смонтированных iPod.
-    nonisolated static func mountedModelNumbers() -> [String] {
+    struct MountedIPod {
+        var path: String
+        var guid: String         // «000A270022FC25B9» или пусто
+        var modelNumber: String  // «A446» или пусто
+        var name: String?
+    }
+
+    /// iPod, смонтированные как диски: GUID и номер модели из SysInfo / SysInfoExtended, имя из iTunesDB.
+    nonisolated static func mountedIPods() -> [MountedIPod] {
         let vols = (try? FileManager.default.contentsOfDirectory(atPath: "/Volumes")) ?? []
         return vols.compactMap { v in
-            let path = "/Volumes/\(v)/iPod_Control/Device/SysInfo"
-            guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-            for line in text.split(separator: "\n") where line.hasPrefix("ModelNumStr:") {
-                // «ModelNumStr: xA446» → «A446»
-                let raw = line.dropFirst("ModelNumStr:".count).trimmingCharacters(in: .whitespaces)
-                return String(raw.drop { !$0.isLetter || $0 == "x" || $0 == "M" }.prefix(4)).uppercased()
+            let root = "/Volumes/\(v)"
+            guard FileManager.default.fileExists(atPath: root + "/iPod_Control") else { return nil }
+            var guid = "", number = ""
+            if let text = try? String(contentsOfFile: root + "/iPod_Control/Device/SysInfo", encoding: .utf8) {
+                for line in text.split(separator: "\n") {
+                    if line.hasPrefix("ModelNumStr:") {
+                        let raw = line.dropFirst("ModelNumStr:".count).trimmingCharacters(in: .whitespaces)
+                        number = String(raw.drop { !$0.isLetter || $0 == "x" || $0 == "M" }.prefix(4)).uppercased()
+                    }
+                    if line.hasPrefix("FirewireGuid:") {
+                        guid = line.dropFirst("FirewireGuid:".count).trimmingCharacters(in: .whitespaces)
+                            .replacingOccurrences(of: "0x", with: "").uppercased()
+                    }
+                }
             }
-            return nil
+            if guid.isEmpty,
+               let d = FileManager.default.contents(atPath: root + "/iPod_Control/Device/SysInfoExtended"),
+               let plist = try? PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any],
+               let g = plist["FireWireGUID"] as? String {
+                guid = g.replacingOccurrences(of: "0x", with: "").uppercased()
+            }
+            return MountedIPod(path: root, guid: guid, modelNumber: number, name: deviceName(root))
         }
+    }
+
+    /// Имя iPod, как в Finder. nano 6/7: скрытый главный контейнер в SQLite-базе (Library.itdb);
+    /// остальные: главный плейлист (mhyp с флагом master) в iTunesDB.
+    nonisolated static func deviceName(_ root: String) -> String? {
+        if let n = sqliteName(root + "/iPod_Control/iTunes/iTunes Library.itlp/Library.itdb") { return n }
+        guard let h = FileHandle(forReadingAtPath: root + "/iPod_Control/iTunes/iTunesDB") else { return nil }
+        defer { try? h.close() }
+        // Главный плейлист идёт после списка треков — читаем частями, пока не найдём (до 64 МБ).
+        var data = Data()
+        while data.count < 64 << 20, let chunk = try? h.read(upToCount: 4 << 20), !chunk.isEmpty {
+            data.append(chunk)
+            if let name = masterPlaylistName(data) { return name }
+        }
+        return nil
+    }
+
+    /// Только чтение (immutable): базу iPod не трогаем.
+    nonisolated static func sqliteName(_ path: String) -> String? {
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        var db: OpaquePointer?
+        let uri = "file:" + (path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path) + "?immutable=1"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else { sqlite3_close(db); return nil }
+        defer { sqlite3_close(db) }
+        var st: OpaquePointer?
+        let sql = "SELECT name FROM container WHERE distinguished_kind = 0 AND is_hidden = 1 AND parent_pid = 0 LIMIT 1"
+        guard sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(st) }
+        guard sqlite3_step(st) == SQLITE_ROW, let c = sqlite3_column_text(st, 0) else { return nil }
+        let name = String(cString: c)
+        return name.isEmpty ? nil : name
+    }
+
+    nonisolated static func masterPlaylistName(_ d: Data) -> String? {
+        let b = [UInt8](d)
+        func u32(_ i: Int) -> Int { i + 4 <= b.count ? Int(b[i]) | Int(b[i + 1]) << 8 | Int(b[i + 2]) << 16 | Int(b[i + 3]) << 24 : 0 }
+        let tag = Array("mhyp".utf8), mhod = Array("mhod".utf8)
+        var i = 0
+        while i + 24 < b.count {
+            if b[i] == tag[0], Array(b[i..<i + 4]) == tag {
+                let hl = u32(i + 4), tl = u32(i + 8)
+                if b[i + 20] == 1 && i + tl <= b.count {       // главный плейлист
+                    var j = i + hl
+                    while j + 40 < i + tl, Array(b[j..<j + 4]) == mhod {
+                        let total = u32(j + 8), type = u32(j + 12)
+                        if type == 1 {                         // заголовок
+                            let len = u32(j + 28)
+                            guard j + 40 + len <= b.count else { return nil }
+                            return String(bytes: b[(j + 40)..<(j + 40 + len)], encoding: .utf16LittleEndian)
+                        }
+                        guard total > 0 else { break }
+                        j += total
+                    }
+                    return nil
+                }
+                i += max(hl, 4)
+                continue
+            }
+            i += 1
+        }
+        return nil
     }
 
     /// USB idProduct (+ номер модели, если известен) → модель в приложении.

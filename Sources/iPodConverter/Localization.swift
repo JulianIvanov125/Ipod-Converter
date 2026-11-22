@@ -282,6 +282,14 @@ enum L {
           "У кожнага iPod свой плэйліст, таму музыка для аднаго iPod не трапіць на іншы. Вокладкі і ацэнкі iPod бярэ з «Музыкі».")
     }
     static var syncOpenFinder: String { t("Open Finder", "Открыть Finder", "Відкрити Finder", "Адкрыць Finder") }
+    static func convertsFor(_ m: String) -> String { t("Converting for \(m)", "Конвертация под \(m)", "Конвертація під \(m)", "Канвертацыя пад \(m)") }
+    static var ambiguousHint: String {
+        t("5G and 5.5G can't be told apart automatically — right-click to choose.",
+          "5G и 5.5G не различить автоматически — уточните правым кликом.",
+          "5G і 5.5G не розрізнити автоматично — уточніть правим кліком.",
+          "5G і 5.5G не адрозніць аўтаматычна — удакладніце правым клікам.")
+    }
+    static func thisIs(_ m: String) -> String { t("This is \(m)", "Это \(m)", "Це \(m)", "Гэта \(m)") }
     static var clearList: String { t("Clear list", "Очистить список", "Очистити список", "Ачысціць спіс") }
     static var colTrack: String { t("Track", "Трек", "Трек", "Трэк") }
     static var colType: String { t("Type", "Тип", "Тип", "Тып") }

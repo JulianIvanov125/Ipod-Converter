@@ -250,9 +250,17 @@ struct IPodTabs: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(store.favoriteModels) { m in
+                let dev = IPodDetector.shared.device(for: m)
                 IPodTab(
-                    title: IPodDetector.shared.isConnected(m) ? L.yourIPod(m.title) : m.title,
-                    connected: IPodDetector.shared.isConnected(m),
+                    // Подключённый iPod — его собственное имя («Julian’s iPod Nano 7»), конвертация — под модель вкладки.
+                    title: dev.map { $0.name ?? L.yourIPod(m.title) } ?? m.title,
+                    connected: dev != nil,
+                    hint: dev.map { L.convertsFor(m.title) + ($0.ambiguous ? "\n" + L.ambiguousHint : "") },
+                    modelChoices: dev.flatMap { d in
+                        d.ambiguous ? [IPodModel.classic5G, .classic55G].map { alt in
+                            (L.thisIs(alt.title), alt == m, { IPodDetector.shared.setModel(alt, for: d) })
+                        } : nil
+                    },
                     selected: store.model == m,
                     canSelect: !store.isBusy,
                     canRemove: store.favoriteModels.count > 1,
@@ -281,6 +289,10 @@ struct IPodTabs: View {
 private struct IPodTab: View {
     let title: String
     var connected = false
+    /// Подсказка для подключённого iPod: под какую модель конвертируем.
+    var hint: String? = nil
+    /// Правый клик: «Это iPod 5G / 5.5G» — когда модель не определить автоматически.
+    var modelChoices: [(String, Bool, () -> Void)]? = nil
     let selected: Bool
     let canSelect: Bool
     let canRemove: Bool
@@ -325,7 +337,16 @@ private struct IPodTab: View {
         .onTapGesture { if canSelect { onSelect() } }
         .onHover { hover = $0 }
         .opacity(!canSelect && !selected ? 0.55 : 1)
-        .help(!canSelect && !selected ? L.waitForConversion : "")
+        .help(!canSelect && !selected ? L.waitForConversion : (hint ?? ""))
+        .contextMenu {
+            if let choices = modelChoices {
+                ForEach(Array(choices.enumerated()), id: \.offset) { _, c in
+                    Button { c.2() } label: {
+                        if c.1 { Label(c.0, systemImage: "checkmark") } else { Text(c.0) }
+                    }
+                }
+            }
+        }
     }
 }
 

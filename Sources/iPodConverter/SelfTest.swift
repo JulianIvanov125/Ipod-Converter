@@ -41,7 +41,9 @@ enum SelfTest {
             return true
         }
         if args.contains("--selftest-ipods") {
-            print("сейчас подключены: \(IPodDetector.detect().map(\.title))")
+            for d in IPodDetector.detect(overrides: IPodDetector.savedOverrides()) {
+                print("подключён: «\(d.name ?? "-")» → конвертация под \(d.model.title)\(d.ambiguous ? " (5G/5.5G не различить автоматически)" : ""), GUID …\(d.serial.suffix(4))")
+            }
             let cases: [(Int, [String], String)] = [
                 (0x1209, ["A002"], "iPod 5G 30GB"), (0x1209, ["A446"], "iPod 5.5G 30GB"), (0x1209, [], "5G/5.5G без диска"),
                 (0x1261, ["B029"], "classic 80GB"), (0x1261, ["B562"], "classic 120GB"), (0x1261, ["C297"], "classic 160GB 2009"),
