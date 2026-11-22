@@ -144,11 +144,11 @@ final class LevelSmoother {
         for i in 0..<Self.n {
             let v = raw[i]
             // Быстрая атака, спад средний — живо, но без дрожи на месте.
-            levels[i] = v > levels[i] ? levels[i] + (v - levels[i]) * 0.55 : levels[i] * 0.86 + v * 0.14
+            levels[i] = v > levels[i] ? levels[i] + (v - levels[i]) * 0.75 : levels[i] * 0.8 + v * 0.2
             peaks[i] = max(levels[i], peaks[i] - 0.012)
             // Скачок: резкий рост в полосе, громче порога, не чаще раза в 0.3 с на полосу.
             let rise = v - prevRaw[i]
-            if rise > 0.14, v > 0.42, time > cooldown[i] {
+            if rise > 0.1, v > 0.35, time > cooldown[i] {
                 onsets.append((i, min(1, v)))
                 cooldown[i] = time + 0.3
                 // Соседние полосы тоже «гасим», чтобы одна нота не давала пачку капель.
@@ -158,10 +158,10 @@ final class LevelSmoother {
         }
         let bass = raw[0..<8].reduce(0, +) / 8
         var bassHit = false
-        if bass - prevBass > 0.08, bass > 0.4, time > bassCooldown {
+        if bass - prevBass > 0.06, bass > 0.33, time > bassCooldown {
             bassHit = true
-            bassCooldown = time + 0.25
-            pulse = min(1, pulse + 0.7)
+            bassCooldown = time + 0.18
+            pulse = min(1, pulse + 0.9)
         }
         pulse *= 0.9
         prevBass = bass
@@ -196,12 +196,12 @@ final class LevelSmoother {
         for k in 0..<Self.flowGroups.count {
             let e = energy(Self.flowGroups[k])
             // Низы реагируют быстрее и сильнее, верх — спокойнее.
-            let attack: Float = k == 0 ? 0.2 : k == 1 ? 0.12 : 0.06
-            let release: Float = k == 0 ? 0.07 : 0.03
+            let attack: Float = k == 0 ? 0.35 : k == 1 ? 0.22 : 0.12
+            let release: Float = k == 0 ? 0.12 : 0.05
             flowLevel[k] += (e - flowLevel[k]) * (e > flowLevel[k] ? attack : release)
-            flowPhase[k] += dt * (0.18 + Double(flowLevel[k]) * 1.6 + Double(kick) * (k == 0 ? 2.4 : k == 1 ? 1.2 : 0.4))
+            flowPhase[k] += dt * (0.18 + Double(flowLevel[k]) * 1.6 + Double(kick) * (k == 0 ? 3.5 : k == 1 ? 1.8 : 0.8))
         }
-        kick += (pulse - kick) * (pulse > kick ? 0.45 : 0.12)
+        kick += (pulse - kick) * (pulse > kick ? 0.7 : 0.14)
         return onsets
     }
 
@@ -252,14 +252,14 @@ final class DropField {
         // берём только самый сильный скачок кадра, удар баса даёт каплю крупнее.
         guard time >= next, let o = onsets.max(by: { $0.strength < $1.strength }) else { return }
         let bass = o.band < 0
-        let strength = CGFloat(o.strength) * (bass ? 1.25 : 0.7)
-        guard strength > 0.3 else { return }
+        let strength = CGFloat(o.strength) * (bass ? 1.3 : 0.85)
+        guard strength > 0.2 else { return }
         drops.append(Drop(x: .random(in: 0.05...0.95), y: .random(in: 0.08...0.92), born: time,
                           strength: min(1.25, strength), hz: bass ? nil : LevelSmoother.hz(o.band),
                           colorIndex: bass ? 0 : o.band < 12 ? 0 : o.band < 30 ? 1 : 2))
-        next = time + (bass ? 0.22 : 0.38)
+        next = time + (bass ? 0.15 : 0.25)
         spawned += 1
-        if drops.count > 14 { drops.removeFirst(drops.count - 14) }
+        if drops.count > 20 { drops.removeFirst(drops.count - 20) }
     }
 }
 
@@ -316,11 +316,11 @@ struct AudioVisualizer: View {
         for i in 0..<LevelSmoother.n {
             let x = CGFloat(i) * (g.w + g.gap)
             // Контраст: тихое ниже, громкое выше; низы подпрыгивают на ударе баса.
-            let boost = i < 12 ? CGFloat(smoother.kick) * 0.25 * (1 - CGFloat(i) / 12) : 0
-            let h = max(3, min(1, pow(CGFloat(smoother.levels[i]), 1.5) * 1.25 + boost) * g.maxH)
+            let boost = i < 12 ? CGFloat(smoother.kick) * 0.4 * (1 - CGFloat(i) / 12) : 0
+            let h = max(3, min(1, pow(CGFloat(smoother.levels[i]), 1.5) * 1.4 + boost) * g.maxH)
             ctx.fill(Path(roundedRect: CGRect(x: x, y: g.baseY - h, width: g.w, height: h), cornerRadius: min(g.w / 2, 4)),
                      with: .linearGradient(gradient, startPoint: CGPoint(x: x, y: g.baseY), endPoint: CGPoint(x: x, y: g.baseY - g.maxH)))
-            let py = g.baseY - min(1, pow(CGFloat(smoother.peaks[i]), 1.5) * 1.25) * g.maxH - 5
+            let py = g.baseY - min(1, pow(CGFloat(smoother.peaks[i]), 1.5) * 1.4) * g.maxH - 5
             ctx.fill(Path(roundedRect: CGRect(x: x, y: py, width: g.w, height: 3), cornerRadius: 1.5), with: .color(.white.opacity(0.85)))
         }
     }
@@ -343,7 +343,7 @@ struct AudioVisualizer: View {
         let g = barGeometry(size)
         for (band, entry) in smoother.labels {
             let alpha = max(0, 1 - (t - entry.t) / 0.6)
-            let y = g.baseY - min(1, pow(CGFloat(smoother.peaks[band]), 1.5) * 1.25) * g.maxH - 24
+            let y = g.baseY - min(1, pow(CGFloat(smoother.peaks[band]), 1.5) * 1.4) * g.maxH - 24
             pill(ctx, LevelSmoother.label(LevelSmoother.hz(band)), at: CGPoint(x: barCenterX(Double(band), size), y: max(14, y)),
                  size: size, alpha: alpha)
         }
@@ -374,7 +374,7 @@ struct AudioVisualizer: View {
                 // Замедление, как у настоящей волны: быстро вначале, потом еле ползёт.
                 let r = CGFloat(1 - exp(-ra * (bass ? 1.1 : 0.75))) * reach * (0.45 + d.strength * 0.55) + 2
                 let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
-                let alpha = min(0.85, 0.38 * Double(d.strength) * appear * fade * (1 - Double(ring) * 0.22) * (1 + kick * 0.9))
+                let alpha = min(0.85, 0.38 * Double(d.strength) * appear * fade * (1 - Double(ring) * 0.22) * (1 + kick * 1.5))
                 let width = (bass ? 2.4 : 1.5) - CGFloat(ring) * 0.3
                 glow.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha * 0.6)), lineWidth: width + 4)
                 ctx.stroke(Circle().path(in: rect), with: .color(c.opacity(alpha)), lineWidth: width)
@@ -406,7 +406,7 @@ struct AudioVisualizer: View {
             let cy = size.height * (0.5 + 0.32 * CGFloat(cos(ph * fy * 0.3 + kk * 2.3)))
             let kick = CGFloat(smoother.kick)
             // Бас раздувает своё пятно и чуть толкает соседнее.
-            let r = minSide * (0.26 + e * (k == 0 ? 0.5 : 0.34) + (k == 0 ? kick * 0.26 : k == 1 ? kick * 0.1 : 0))
+            let r = minSide * (0.26 + e * (k == 0 ? 0.62 : 0.45) + (k == 0 ? kick * 0.4 : k == 1 ? kick * 0.18 : kick * 0.06))
             let stretch = 1.15 + 0.35 * CGFloat(sin(ph * 0.21 + kk))
             let angle = ph * (k.isMultiple(of: 2) ? 0.12 : -0.09) + kk
             var blob = Path()
@@ -428,7 +428,7 @@ struct AudioVisualizer: View {
         // На удар баса фон мягко наливается основным цветом (вместо белой вспышки).
         let kick = Double(smoother.kick)
         if kick > 0.02 {
-            ctx.fill(Path(full), with: .radialGradient(Gradient(colors: [blend[0].opacity(kick * 0.35), .clear]),
+            ctx.fill(Path(full), with: .radialGradient(Gradient(colors: [blend[0].opacity(kick * 0.5), .clear]),
                                                        center: CGPoint(x: size.width / 2, y: size.height * 0.55),
                                                        startRadius: 0, endRadius: max(size.width, size.height) * 0.7))
         }
