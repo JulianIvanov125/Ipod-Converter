@@ -189,9 +189,11 @@ struct MusicSection: View {
                 .disabled(store.convertibleTracks.isEmpty)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-        .overlay(alignment: .top) { Rectangle().fill(hairline).frame(height: 1) }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .clearGlass(in: RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 }
 
@@ -360,8 +362,7 @@ struct TrackRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 10).fill(rowFill))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hairline))
+        .glassCard(RoundedRectangle(cornerRadius: 10), solid: rowFill)
         .foregroundStyle(ink)
         .alert(L.areYouSure, isPresented: $confirmRemove) {
             Button(L.stopAndRemove, role: .destructive, action: onRemove)

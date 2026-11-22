@@ -77,7 +77,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: PlayerController.shared.isFullscreen)
-        .background(Theme.bg.ignoresSafeArea())
+        .background(WindowBackground())
         .foregroundStyle(ink)
         .dropDestination(for: URL.self) { urls, _ in
             store.add(urls)
@@ -183,9 +183,11 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-        .overlay(alignment: .top) { Rectangle().fill(hairline).frame(height: 1) }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .clearGlass(in: RoundedRectangle(cornerRadius: 18))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 }
 
@@ -266,7 +268,7 @@ struct IPodTabs: View {
             }
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.tint(0.055)))
+        .clearGlass(in: RoundedRectangle(cornerRadius: 8), solid: Theme.tint(0.055))
         .alert(
             L.areYouSure,
             isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
@@ -383,7 +385,7 @@ struct CatalogView: View {
             .padding(.vertical, 6)
         }
         .frame(width: 330)
-        .background(Theme.raised)
+        .background(GlassMode.isOn ? Color.clear : Theme.raised)
         .foregroundStyle(ink)
     }
 
@@ -510,8 +512,7 @@ struct ItemCard: View {
             controls
         }
         .padding(18)
-        .background(RoundedRectangle(cornerRadius: 16).fill(cardFill))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(hairline))
+        .glassCard(RoundedRectangle(cornerRadius: 16), solid: cardFill)
     }
 
     private var titleRow: some View {
@@ -803,11 +804,11 @@ struct SpecColumn: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Theme.raised)
+                .fill(GlassMode.isOn ? Theme.glassCard : Theme.raised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(highlighted ? Color.accentColor.opacity(0.35) : hairline)
+                .strokeBorder(highlighted ? Color.accentColor.opacity(0.35) : (GlassMode.isOn ? Theme.glassEdge : hairline))
         )
     }
 }

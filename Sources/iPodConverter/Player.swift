@@ -494,12 +494,8 @@ struct MiniPlayer: View {
             }
             .padding(12)
             .frame(width: 340)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Theme.raised)
-                    .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
-            )
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.hairline))
+            .clearGlass(in: RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(GlassMode.isOn ? 0.12 : 0.18), radius: 18, y: 6)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -660,11 +656,12 @@ struct MusicPlayerBar: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .background(Theme.raised)
-            .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
+            .clearGlass(in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

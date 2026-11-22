@@ -39,8 +39,14 @@ final class AppearanceSettings {
         }
     }
 
+    /// Стекло: полупрозрачное окно и стеклянные панели (Clear Glass).
+    var glass: Bool {
+        didSet { UserDefaults.standard.set(glass, forKey: "glass") }
+    }
+
     private init() {
         choice = AppAppearance(rawValue: UserDefaults.standard.string(forKey: "appearance") ?? "") ?? .system
+        glass = UserDefaults.standard.object(forKey: "glass") as? Bool ?? true
     }
 
     func apply() {
@@ -66,6 +72,12 @@ enum Theme {
     static let raised = dynamic(light: .white, dark: rgb(0x4A4A4F))
     /// Основной текст.
     static let ink = dynamic(light: rgb(0x1C1C1E), dark: rgb(0xF5F5F7))
+    /// Стекло: подложка окна поверх размытого рабочего стола (чтобы текст читался на любых обоях).
+    static let glassTint = dynamic(light: NSColor.white.withAlphaComponent(0.45), dark: rgb(0x1E1E20).withAlphaComponent(0.55))
+    /// Стекло: полупрозрачные карточки и строки файлов.
+    static let glassCard = dynamic(light: NSColor.white.withAlphaComponent(0.55), dark: NSColor.white.withAlphaComponent(0.09))
+    /// Стекло: светлая кромка карточек.
+    static let glassEdge = dynamic(light: NSColor.white.withAlphaComponent(0.8), dark: NSColor.white.withAlphaComponent(0.14))
     /// Тонкие линии и рамки.
     static let hairline = dynamic(light: NSColor.black.withAlphaComponent(0.07), dark: NSColor.white.withAlphaComponent(0.12))
 
@@ -102,6 +114,13 @@ struct AppearanceMenu: View {
                     Label(a.title, systemImage: settings.choice == a ? "checkmark" : a.icon)
                 }
             }
+            Divider()
+            Button {
+                settings.glass.toggle()
+            } label: {
+                Label(L.glassMode, systemImage: settings.glass ? "checkmark" : "square.on.square.intersection.dashed")
+            }
+            .disabled(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
         } label: {
             Image(systemName: settings.choice.icon)
                 .font(.system(size: 11, weight: .medium))
