@@ -339,14 +339,24 @@ final class TrackItem: Identifiable {
     let url: URL
     var info: AudioInfo?
     var artwork: NSImage?
-    var state: State = .loading
+    /// iPod открытой вкладки — для него показываем состояние строки.
+    var viewModel: IPodModel?
+    /// Анализ файла — общий для всех iPod.
+    private var base: State = .loading
+    /// Своё состояние для каждого iPod: в очереди / идёт / готово / ошибка.
+    private var perModel: [IPodModel: State] = [:]
+    private var musicErrorBy: [IPodModel: String] = [:]
+    var state: State { viewModel.flatMap { perModel[$0] } ?? base }
+    func state(for m: IPodModel) -> State? { perModel[m] }
+    func setState(_ s: State?, for m: IPodModel) { perModel[m] = s }
     var isChecked = false
     /// Оценка 0–100 (20 = ★). Берётся из файла, меняется в списке.
     var rating = 0
     /// Трек в «Музыке» после добавления — чтобы менять там оценку.
     var musicPersistentID: String?
-    /// Не удалось добавить в «Музыку» (текст ошибки) — показываем у трека и в отчёте.
-    var musicError: String?
+    /// Не удалось добавить в «Музыку» (текст ошибки) — у трека на вкладке этого iPod и в отчёте.
+    var musicError: String? { viewModel.flatMap { musicErrorBy[$0] } }
+    func setMusicError(_ e: String?, for m: IPodModel) { musicErrorBy[m] = e }
     /// Что нашлось в интернете для пустых тегов.
     var fetched: FetchedMeta?
     var metaStatus: MetaStatus = .idle
@@ -374,24 +384,24 @@ final class TrackItem: Identifiable {
 
     var displayTitle: String { info?.title ?? url.deletingPathExtension().lastPathComponent }
 
+    /// Идёт конвертация (для любого iPod).
     var isConverting: Bool {
-        if case .converting = state { return true }
-        return false
+        perModel.values.contains { if case .converting = $0 { return true } else { return false } }
     }
 
-    var isActive: Bool { isConverting || state == .queued }
+    var isActive: Bool { isConverting || perModel.values.contains(.queued) }
 
     func load() async {
         do {
             let info = try await FFmpeg.probeAudio(url)
             self.info = info
             rating = info.rating ?? 0
-            state = .ready
+            base = .ready
             if let idx = info.coverStreamIndex {
                 artwork = await FFmpeg.coverThumbnail(url, index: idx)
             }
         } catch {
-            state = .failed(error.localizedDescription)
+            base = .failed(error.localizedDescription)
         }
     }
 
@@ -407,9 +417,10 @@ final class TrackItem: Identifiable {
     }
 
     /// Запускает ffmpeg; completion получает готовый файл или nil.
-    func convert(plan: AudioPlan, into folder: URL, completion: @escaping @MainActor (URL?) -> Void) {
+    func convert(plan: AudioPlan, model: IPodModel, into folder: URL, completion: @escaping @MainActor (URL?) -> Void) {
+        if viewModel == nil { viewModel = model }
         guard let info, let ffmpeg = FFmpeg.tool("ffmpeg") else {
-            state = .failed(L.toolNotFound("ffmpeg"))
+            perModel[model] = .failed(L.toolNotFound("ffmpeg"))
             completion(nil)
             return
         }
@@ -420,14 +431,14 @@ final class TrackItem: Identifiable {
         let args = FFmpeg.audioArguments(input: url, output: output, info: info, plan: plan, fetched: fetched)
         let job = ConversionJob()
         self.job = job
-        state = .converting(0)
+        perModel[model] = .converting(0)
         do {
             try job.start(
                 ffmpeg: ffmpeg, args: args, duration: info.duration,
                 progress: { [weak self] p in
                     Task { @MainActor in
-                        guard let self, self.isConverting else { return }
-                        self.state = .converting(p)
+                        guard let self, case .converting? = self.perModel[model] else { return }
+                        self.perModel[model] = .converting(p)
                     }
                 },
                 completion: { [weak self] status, stderr in
@@ -436,27 +447,27 @@ final class TrackItem: Identifiable {
                         self.job = nil
                         if job.cancelled {
                             try? FileManager.default.removeItem(at: output)
-                            self.state = .ready
+                            self.perModel[model] = nil
                             completion(nil)
                         } else if status == 0 {
-                            self.state = .done(output)
+                            self.perModel[model] = .done(output)
                             completion(output)
                         } else {
                             try? FileManager.default.removeItem(at: output)
-                            self.state = .failed(FFmpeg.ffmpegOutputLine(stderr))
+                            self.perModel[model] = .failed(FFmpeg.ffmpegOutputLine(stderr))
                             completion(nil)
                         }
                     }
                 }
             )
         } catch {
-            state = .failed(error.localizedDescription)
+            perModel[model] = .failed(error.localizedDescription)
             completion(nil)
         }
     }
 
     func cancel() {
-        if state == .queued { state = .ready }
+        for (m, st) in perModel where st == .queued { perModel[m] = nil }
         job?.cancel()
     }
 
@@ -485,12 +496,13 @@ final class TrackItem: Identifiable {
     }
 
     /// Формат уже подходит iPod — просто копируем файл в папку (без перекодирования, качество то же).
-    func copyAsIs(into folder: URL, completion: @escaping @MainActor (URL?) -> Void) {
+    func copyAsIs(model: IPodModel, into folder: URL, completion: @escaping @MainActor (URL?) -> Void) {
+        if viewModel == nil { viewModel = model }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let src = url
         let dest = Self.uniqueURL(in: folder, base: src.deletingPathExtension().lastPathComponent,
                                   ext: src.pathExtension.isEmpty ? "m4a" : src.pathExtension)
-        state = .converting(0)
+        perModel[model] = .converting(0)
         Task.detached(priority: .userInitiated) {
             let error: String? = {
                 do { try FileManager.default.copyItem(at: src, to: dest); return nil }
@@ -498,10 +510,10 @@ final class TrackItem: Identifiable {
             }()
             await MainActor.run {
                 if let error {
-                    self.state = .failed(error)
+                    self.perModel[model] = .failed(error)
                     completion(nil)
                 } else {
-                    self.state = .done(dest)
+                    self.perModel[model] = .done(dest)
                     completion(dest)
                 }
             }

@@ -31,12 +31,33 @@ final class VideoItem: Identifiable {
     var meta: VideoMeta?
     /// JPEG-превью во временной папке — вшивается в готовый файл как обложка.
     @ObservationIgnored private var coverFile: URL?
-    var state: State = .loading
-    var usedModel: IPodModel?
-    var usedSettings: EncodeSettings?
-    var outputBytes: Int64?
+    /// iPod открытой вкладки — для него показываем состояние карточки.
+    var viewModel: IPodModel?
+    /// Анализ файла — общий для всех iPod: загрузка / готово / не читается.
+    private var base: State = .loading
+    /// Своё состояние для каждого iPod: в очереди / идёт / готово / ошибка.
+    private var perModel: [IPodModel: State] = [:]
+    private var settingsBy: [IPodModel: EncodeSettings] = [:]
+    private var bytesBy: [IPodModel: Int64] = [:]
+    private var musicBy: [IPodModel: (text: String, ok: Bool)] = [:]
+
+    /// Состояние для открытой вкладки (если для этого iPod ничего не делали — общее «готово»).
+    var state: State { viewModel.flatMap { perModel[$0] } ?? base }
+    func state(for m: IPodModel) -> State? { perModel[m] }
+    func setState(_ s: State?, for m: IPodModel) { perModel[m] = s }
+    /// Для какого iPod результат на открытой вкладке (nil — для него ещё не конвертировали).
+    var usedModel: IPodModel? { viewModel.flatMap { perModel[$0] != nil ? $0 : nil } }
+    var usedSettings: EncodeSettings? { viewModel.flatMap { settingsBy[$0] } }
+    var outputBytes: Int64? { viewModel.flatMap { bytesBy[$0] } }
     /// Статус добавления в Music.app (nil — не добавляли).
-    var musicStatus: (text: String, ok: Bool)?
+    var musicStatus: (text: String, ok: Bool)? { viewModel.flatMap { musicBy[$0] } }
+    /// Идёт или ждёт конвертация для этого iPod.
+    func isActive(for m: IPodModel) -> Bool {
+        switch perModel[m] {
+        case .converting?, .queued?: return true
+        default: return false
+        }
+    }
     @ObservationIgnored private var addToMusic = false
     @ObservationIgnored private var usedMeta: VideoMeta?
 
@@ -81,12 +102,7 @@ final class VideoItem: Identifiable {
     }
 
     /// Идёт или ждёт в очереди — карточку в это время не редактируем.
-    var isConverting: Bool {
-        switch state {
-        case .converting, .queued: return true
-        default: return false
-        }
-    }
+    var isConverting: Bool { perModel.keys.contains { isActive(for: $0) } }
 
     private func ended() {
         let f = onFinish
@@ -103,7 +119,7 @@ final class VideoItem: Identifiable {
             let info = try await FFmpeg.probe(url)
             self.info = info
             meta = VideoClassifier.guess(url: url, info: info)
-            state = .ready
+            base = .ready
             if let jpeg = await FFmpeg.preview(url, info: info) {
                 thumbnail = NSImage(data: jpeg)
                 let dir = FileManager.default.temporaryDirectory.appendingPathComponent("iPodConverter", isDirectory: true)
@@ -112,16 +128,17 @@ final class VideoItem: Identifiable {
                 if (try? jpeg.write(to: file)) != nil { coverFile = file }
             }
         } catch {
-            state = .failed(error.localizedDescription)
+            base = .failed(error.localizedDescription)
         }
     }
 
     /// videoRoot — папка «iPod Converter Video».
     func convert(model: IPodModel, settings: EncodeSettings, videoRoot: URL, addToMusic: Bool) {
-        if case .converting = state { return }
-        guard let info else { state = .ready; ended(); return }
+        if case .converting? = perModel[model] { return }
+        if viewModel == nil { viewModel = model }
+        guard let info else { perModel[model] = nil; ended(); return }
         guard let ffmpeg = FFmpeg.tool("ffmpeg") else {
-            state = .failed(FFmpegError.notFound("ffmpeg").localizedDescription)
+            perModel[model] = .failed(FFmpegError.notFound("ffmpeg").localizedDescription)
             ended()
             return
         }
@@ -135,20 +152,19 @@ final class VideoItem: Identifiable {
 
         let job = ConversionJob()
         self.job = job
-        usedModel = model
-        usedSettings = settings
-        outputBytes = nil
-        musicStatus = nil
+        settingsBy[model] = settings
+        bytesBy[model] = nil
+        musicBy[model] = nil
         self.addToMusic = addToMusic
-        state = .converting(0)
+        perModel[model] = .converting(0)
 
         do {
             try job.start(
                 ffmpeg: ffmpeg, args: args, duration: info.duration,
                 progress: { [weak self] p in
                     Task { @MainActor [weak self] in
-                        guard let self, self.isConverting else { return }
-                        self.state = .converting(p)
+                        guard let self, case .converting? = self.perModel[model] else { return }
+                        self.perModel[model] = .converting(p)
                     }
                 },
                 completion: { [weak self] status, stderr in
@@ -158,7 +174,7 @@ final class VideoItem: Identifiable {
                 }
             )
         } catch {
-            state = .failed(error.localizedDescription)
+            perModel[model] = .failed(error.localizedDescription)
             ended()
         }
     }
@@ -168,12 +184,12 @@ final class VideoItem: Identifiable {
         defer { ended() }
         if job.cancelled {
             try? FileManager.default.removeItem(at: output)
-            state = .ready
+            perModel[model] = nil          // отмена — как будто для этого iPod не запускали
             return
         }
         if status == 0 {
-            outputBytes = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) }
-            state = .done(output)
+            bytesBy[model] = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) }
+            perModel[model] = .done(output)
             guard addToMusic else {
                 self.notify(
                     title: L.videoReady(model.title),
@@ -184,7 +200,7 @@ final class VideoItem: Identifiable {
             }
             let meta = usedMeta
             let inTV = meta.map { $0.category != .musicVideo } ?? false
-            musicStatus = (inTV ? L.addingToTV : L.addingToMusic, true)
+            musicBy[model] = (inTV ? L.addingToTV : L.addingToMusic, true)
             Task {
                 do {
                     if let meta, inTV {
@@ -192,14 +208,14 @@ final class VideoItem: Identifiable {
                     } else {
                         try await MusicLibrary.add(output, playlist: model.playlistName, name: meta?.title ?? "", artist: meta?.artist ?? "")
                     }
-                    musicStatus = (inTV ? L.inTV(model.playlistName) : L.inMusic(model.playlistName), true)
+                    musicBy[model] = (inTV ? L.inTV(model.playlistName) : L.inMusic(model.playlistName), true)
                     self.notify(
                         title: L.videoReady(model.title),
                         body: L.addedBody(displayTitle, model.playlistName),
                         fileURL: output
                     )
                 } catch {
-                    musicStatus = (error.localizedDescription, false)
+                    musicBy[model] = (error.localizedDescription, false)
                     self.notify(
                         title: L.videoReady(model.title),
                         body: L.notAddedBody(error.localizedDescription),
@@ -209,12 +225,15 @@ final class VideoItem: Identifiable {
             }
         } else {
             try? FileManager.default.removeItem(at: output)
-            state = .failed(FFmpeg.ffmpegOutputLine(stderr))
+            perModel[model] = .failed(FFmpeg.ffmpegOutputLine(stderr))
         }
     }
 
     func cancel() {
-        if state == .queued { state = .ready; ended() }
+        // Ждущие в очереди — снимаем; идущую — останавливаем (её итог запишет finish).
+        let queued = perModel.filter { $0.value == .queued }.map(\.key)
+        for m in queued { perModel[m] = nil }
+        if !queued.isEmpty { ended() }
         job?.cancel()
     }
 
@@ -300,6 +319,12 @@ final class Store {
     /// То же для видео.
     var videoBatchStatus: (text: String, ok: Bool)?
     var videoReport: String?
+    /// Для какого iPod был итог последней пачки видео — показываем его только на этой вкладке.
+    private(set) var videoStatusModel: IPodModel?
+    var videoStatusForTab: (text: String, ok: Bool)? { videoStatusModel == model ? videoBatchStatus : nil }
+    var videoReportForTab: String? { videoStatusModel == model ? videoReport : nil }
+    var musicStatusForTab: (text: String, ok: Bool)? { batch.model == model ? musicBatchStatus : nil }
+    var musicReportForTab: String? { batch.model == model ? musicReport : nil }
 
     // Очередь конвертации треков
     @ObservationIgnored private var musicQueue: [TrackItem] = []
@@ -309,7 +334,12 @@ final class Store {
     private(set) var musicBatchTotal = 0
     @ObservationIgnored private var musicBatchIDs: Set<UUID> = []
     var model: IPodModel {
-        didSet { UserDefaults.standard.set(model.rawValue, forKey: "model") }
+        didSet {
+            UserDefaults.standard.set(model.rawValue, forKey: "model")
+            // Вкладка iPod — у каждого своё состояние: готово / ошибка / в очереди.
+            for v in items { v.viewModel = model }
+            for t in tracks { t.viewModel = model }
+        }
     }
     var addToMusic: Bool {
         didSet { UserDefaults.standard.set(addToMusic, forKey: "addToMusic") }
@@ -356,7 +386,7 @@ final class Store {
 
     /// Идёт ли сейчас конвертация под этот iPod.
     func isConverting(for m: IPodModel) -> Bool {
-        items.contains { $0.isConverting && $0.usedModel == m } || videoQueue.contains { $0.model == m } || (isMusicBusy && batch.model == m)
+        items.contains { $0.isActive(for: m) } || videoQueue.contains { $0.model == m } || (isMusicBusy && batch.model == m)
     }
 
     /// Убрать вкладку (снять звёздочку). Конвертации под этот iPod останавливаются.
@@ -378,7 +408,7 @@ final class Store {
         guard isFavorite(m) else { return }   // закрыть можно и последнюю вкладку
         // Закрыли вкладку подключённого iPod — не навязываем её снова, пока его не переподключат.
         if IPodDetector.shared.isConnected(m) { dismissedConnected.insert(m) }
-        for item in items where item.isConverting && item.usedModel == m { item.cancel() }
+        for item in items where item.isActive(for: m) { item.cancel() }
         if isMusicBusy && batch.model == m { cancelMusic() }
         toggleFavorite(m)
     }
@@ -529,6 +559,7 @@ final class Store {
             if AudioRules.audioExtensions.contains(file.pathExtension.lowercased()) {
                 guard !tracks.contains(where: { $0.url == file }) else { continue }
                 let t = TrackItem(url: file)
+                t.viewModel = model
                 tracks.append(t)
                 addedAudio += 1
                 Task {
@@ -541,6 +572,7 @@ final class Store {
             } else {
                 guard !items.contains(where: { $0.url == file }) else { continue }
                 let item = VideoItem(url: file)
+                item.viewModel = model
                 items.append(item)
                 addedVideo += 1
                 Task {
@@ -652,7 +684,7 @@ final class Store {
         let folder = musicDestination
         musicBatchIDs = []
         for t in list where t.plan(for: model) != nil {
-            t.state = .queued
+            t.setState(.queued, for: model)
             musicQueue.append(t)
             musicBatchIDs.insert(t.id)
         }
@@ -663,7 +695,7 @@ final class Store {
     private func pumpMusic(folder: URL) {
         while musicRunning < Self.maxParallelTracks, !musicQueue.isEmpty {
             let t = musicQueue.removeFirst()
-            guard t.state == .queued, let plan = t.plan(for: batch.model) else { musicBatchTotal -= 1; continue }
+            guard t.state(for: batch.model) == .queued, let plan = t.plan(for: batch.model) else { musicBatchTotal -= 1; continue }
             musicRunning += 1
             let done: @MainActor (URL?) -> Void = { [weak self] output in
                 guard let self else { return }
@@ -671,15 +703,15 @@ final class Store {
                 if let output {
                     self.batch.outputs.append((output, t))
                     if plan == .compatible { self.batch.kept += 1 } else { self.batch.converted += 1 }
-                } else if case .failed = t.state {
+                } else if case .failed? = t.state(for: self.batch.model) {
                     self.batch.failed += 1
                 }
                 self.pumpMusic(folder: folder)
             }
             if plan == .compatible && !t.needsRetag {
-                t.copyAsIs(into: folder, completion: done)
+                t.copyAsIs(model: batch.model, into: folder, completion: done)
             } else {
-                t.convert(plan: plan, into: folder, completion: done)
+                t.convert(plan: plan, model: batch.model, into: folder, completion: done)
             }
         }
         if musicRunning == 0 && musicQueue.isEmpty { finishMusicBatch() }
@@ -708,7 +740,7 @@ final class Store {
         let batchTracks = tracks.filter { musicBatchIDs.contains($0.id) }
         // Ошибки конвертации: файл и текст ffmpeg.
         var failures: [SupportReport.Failure] = batchTracks.compactMap { t in
-            if case .failed(let msg) = t.state { return .init(file: t.url.lastPathComponent, stage: "convert", error: msg) }
+            if case .failed(let msg)? = t.state(for: b.model) { return .init(file: t.url.lastPathComponent, stage: "convert", error: msg) }
             return nil
         }
         func report(_ ok: [String]) -> String? {
@@ -742,10 +774,10 @@ final class Store {
                         let answer = k < answers.count ? answers[k] : ""
                         if answer.hasPrefix("ERR:") {
                             let msg = String(answer.dropFirst(4))
-                            t.musicError = msg
+                            t.setMusicError(msg, for: b.model)
                             failures.append(.init(file: t.url.lastPathComponent, stage: "add to Music", error: msg))
                         } else {
-                            t.musicError = nil
+                            t.setMusicError(nil, for: b.model)
                             if !answer.isEmpty { t.musicPersistentID = answer }
                             added.append(t.url.lastPathComponent)
                         }
@@ -754,7 +786,7 @@ final class Store {
                     // Вся партия не прошла (например, нет доступа к «Музыке») — дальше не идём.
                     let rest = b.outputs[start...]
                     for (_, t) in rest {
-                        t.musicError = error.localizedDescription
+                        t.setMusicError(error.localizedDescription, for: b.model)
                         failures.append(.init(file: t.url.lastPathComponent, stage: "add to Music", error: error.localizedDescription))
                     }
                     break
@@ -849,7 +881,7 @@ final class Store {
             videoBatchStatus = nil; videoReport = nil
         }
         for item in list where !item.isConverting {
-            item.state = .queued
+            item.setState(.queued, for: model)
             videoQueue.append(VideoJob(item: item, model: model, settings: settings(for: item), root: outputFolder, addToMusic: addToMusic))
             videoBatchIDs.insert(item.id)
             videoBatchModels.insert(model)
@@ -862,7 +894,7 @@ final class Store {
         while videoRunning < Self.maxParallelVideos, !videoQueue.isEmpty {
             let job = videoQueue.removeFirst()
             // Убрали из списка или отменили, пока ждало, — не считаем.
-            guard job.item.state == .queued, items.contains(where: { $0.id == job.item.id }) else {
+            guard job.item.state(for: job.model) == .queued, items.contains(where: { $0.id == job.item.id }) else {
                 videoBatch.total -= 1
                 videoBatchIDs.remove(job.item.id)
                 continue
@@ -872,8 +904,9 @@ final class Store {
             job.item.onFinish = { [weak self, weak item = job.item] in
                 guard let self else { return }
                 self.videoRunning -= 1
-                if case .failed = item?.state { self.videoBatch.failed += 1 }
-                if case .ready = item?.state {          // отменили во время конвертации
+                let st = item?.state(for: job.model)
+                if case .failed? = st { self.videoBatch.failed += 1 }
+                if st == nil {                          // отменили во время конвертации
                     self.videoBatch.total -= 1
                 } else {
                     self.videoBatch.finished += 1
@@ -888,6 +921,7 @@ final class Store {
     private func finishVideoBatch() {
         let b = videoBatch
         let batchItems = items.filter { videoBatchIDs.contains($0.id) }
+        videoStatusModel = videoBatchModels.count == 1 ? videoBatchModels.first : nil
         let failures: [SupportReport.Failure] = batchItems.compactMap { v in
             if case .failed(let msg) = v.state { return .init(file: v.url.lastPathComponent, stage: "convert", error: msg) }
             return nil
@@ -939,7 +973,7 @@ final class Store {
         let queued = videoQueue
         videoQueue.removeAll()
         videoBatch.total -= queued.count
-        for j in queued { j.item.state = .ready; j.item.onFinish = nil }
+        for j in queued { j.item.setState(nil, for: j.model); j.item.onFinish = nil }
         for v in items where v.isConverting { v.cancel() }
         if videoRunning == 0 { finishVideoBatch() }
     }

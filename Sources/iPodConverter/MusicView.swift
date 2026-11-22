@@ -155,14 +155,14 @@ struct MusicSection: View {
 
             MusicOutputButton(store: store)
 
-            if let status = store.musicBatchStatus {
+            if let status = store.musicStatusForTab {
                 Label(status.text, systemImage: status.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(status.ok ? Color.green : Color.red)
                     .lineLimit(2)
                     .textSelection(.enabled)
             }
-            if let report = store.musicReport {
+            if let report = store.musicReportForTab {
                 CopyReportButton(text: report)
             }
 

@@ -140,7 +140,7 @@ enum SelfTest {
                     if let c = t.fetched?.coverFile { print("   + обложка \(c.lastPathComponent)") }
                     guard let plan = t.plan(for: .classic55G) else { continue }
                     let p: AudioPlan = plan == .compatible && !t.needsRetag ? .aac(rate: 44100, kbps: 256) : plan
-                    let r: URL? = await withCheckedContinuation { cont in t.convert(plan: p, into: out) { cont.resume(returning: $0) } }
+                    let r: URL? = await withCheckedContinuation { cont in t.convert(plan: p, model: .classic55G, into: out) { cont.resume(returning: $0) } }
                     print("   ⇒ \(r?.lastPathComponent ?? "FAILED \(t.state)")")
                 }
                 exit(0)
@@ -182,7 +182,7 @@ enum SelfTest {
                 st.addToMusic = false
                 st.rootFolder = root
                 st.createFolderStructure()
-                for f in files { let v = VideoItem(url: f); st.items.append(v); await v.load() }
+                for f in files { let v = VideoItem(url: f); v.viewModel = st.model; st.items.append(v); await v.load() }
                 // «--break»: исходник третьего файла пропадает после анализа — проверяем, как видна ошибка.
                 if args.contains("--break"), files.count > 2 { try? FileManager.default.removeItem(at: files[2]) }
                 st.enqueueVideos(st.items)
@@ -198,6 +198,17 @@ enum SelfTest {
                 print("пачка: \(files.count) видео, одновременно максимум \(maxRunning), готово \(done), за \(String(format: "%.1f", Date().timeIntervalSince(t0))) с")
                 print("прогресс: " + log.joined(separator: " → "))
                 print("статус: \(st.videoBatchStatus.map { $0.text } ?? "-")")
+                // Вкладки: у другого iPod своё состояние — ни «готово», ни ошибок от этой пачки.
+                @MainActor func isDone(_ v: VideoItem) -> Bool { if case .done = v.state { return true } else { return false } }
+                @MainActor func isFailed(_ v: VideoItem) -> Bool { if case .failed = v.state { return true } else { return false } }
+                let first = st.model
+                let other: IPodModel = first == .nano7 ? .classic5G : .nano7
+                let a = (st.items.filter(isDone).count, st.items.filter(isFailed).count)
+                st.model = other
+                let b = (st.items.filter(isDone).count, st.items.filter(isFailed).count, st.videosToConvert.count)
+                st.model = first
+                let c = st.items.filter(isDone).count
+                print("вкладка \(first.title): готово \(a.0), ошибок \(a.1) · вкладка \(other.title): готово \(b.0), ошибок \(b.1), к конвертации \(b.2) · обратно: готово \(c)")
                 if let r = st.videoReport { print("--- отчёт ---\n" + r) }
                 UserDefaults.standard.setPersistentDomain(saved, forName: domain)
                 exit(0)
@@ -437,7 +448,7 @@ enum SelfTest {
                       + "fmt=\(AudioOutputSettings.shared.choice.rawValue)/\(AudioOutputSettings.shared.kbps) cover=\(info.coverStreamIndex.map(String.init) ?? "-") rating=\(info.rating.map { "\($0 / 20)★" } ?? "-") → \(plan)")
                 if plan == .compatible { continue }
                 let result: URL? = await withCheckedContinuation { cont in
-                    t.convert(plan: plan, into: out) { cont.resume(returning: $0) }
+                    t.convert(plan: plan, model: model, into: out) { cont.resume(returning: $0) }
                 }
                 print("   ⇒ \(result?.lastPathComponent ?? "FAILED: \(t.state)")")
             }
