@@ -33,6 +33,26 @@ enum SelfTest {
             }
             return true
         }
+        // --selftest-edit <папка> <обложка>: правка тегов пользователем (замена, удаление, новая обложка).
+        if let i = args.firstIndex(of: "--selftest-edit"), args.count > i + 2 {
+            let dir = URL(fileURLWithPath: args[i + 1])
+            let cover = URL(fileURLWithPath: args[i + 2])
+            setvbuf(stdout, nil, _IOLBF, 0)
+            Task { @MainActor in
+                let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                    .filter { $0.lastPathComponent.hasPrefix("e-") }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+                for f in files {
+                    let t = TrackItem(url: f)
+                    await t.load()
+                    let e = await t.saveTags(set: ["title": "Edited Title", "album": "Edited Album", "genre": "Jazz", "track": "7/12"],
+                                             clear: ["date"], cover: cover)
+                    let a = try? await FFmpeg.probeAudio(f)
+                    print("\(f.lastPathComponent): ошибка=\(e ?? "-") title=\(a?.title ?? "-") album=\(a?.album ?? "-") genre=\(a?.tags["genre"] ?? "-") track=\(a?.tags["track"] ?? "-") date=\(a?.tags["date"] ?? "нет") обложка=\(a?.coverStreamIndex != nil) smpb=\(a?.tags["itunsmpb"] != nil)")
+                }
+                exit(0)
+            }
+            return true
+        }
         // --selftest-tags <папка с копиями файлов> <обложка.jpg>: пишет теги в файлы, проверяет пометку и дубли.
         if let i = args.firstIndex(of: "--selftest-tags"), args.count > i + 2 {
             let dir = URL(fileURLWithPath: args[i + 1])

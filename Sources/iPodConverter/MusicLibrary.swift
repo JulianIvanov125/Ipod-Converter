@@ -169,6 +169,65 @@ enum MusicLibrary {
         return out.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
+    /// «Музыка» хранит теги и обложку у себя и сама файл не перечитывает. После записи тегов в файл
+    /// просим её обновить трек (refresh), а обложку, если её не было, ставим явно.
+    /// Ответ по каждому файлу: «сколько треков обновлено|новый путь» или «ERR:…».
+    /// Новый путь — если «Музыка» сама переименовала файл («Упорядочивать папку медиатеки»).
+    static func refresh(_ items: [(file: URL, cover: URL?)]) async throws -> [String] {
+        guard !items.isEmpty else { return [] }
+        let args = items.flatMap { [$0.file.path, $0.cover?.path ?? ""] }
+        let out = try await run(refreshScript, args, app: L.musicApp)
+        return out.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private static let refreshScript = """
+    on run argv
+        set out to ""
+        tell application "Music"
+            -- Расположения всех файловых треков один раз: поиск «whose location is» не находит.
+            set allTracks to file tracks of library playlist 1
+            set locs to location of every file track of library playlist 1
+        end tell
+        set paths to {}
+        repeat with l in locs
+            try
+                set end of paths to POSIX path of l
+            on error
+                set end of paths to ""
+            end try
+        end repeat
+        tell application "Music"
+            repeat with i from 1 to (count argv) by 2
+                set p to item i of argv
+                set c to item (i + 1) of argv
+                set n to 0
+                set np to ""
+                try
+                    repeat with k from 1 to (count paths)
+                        if item k of paths is p then
+                            set t to item k of allTracks
+                            refresh t
+                            if c is not "" then
+                                try
+                                    set data of artwork 1 of t to (read (POSIX file c) as picture)
+                                end try
+                            end if
+                            set n to n + 1
+                            try
+                                set np to POSIX path of ((location of t) as alias)
+                            end try
+                        end if
+                    end repeat
+                    set out to out & n & "|" & np & linefeed
+                on error e
+                    set out to out & "ERR:" & e & linefeed
+                end try
+            end repeat
+        end tell
+        return out
+    end run
+    """
+
     @discardableResult
     private static func run(_ source: String, _ argv: [String], app: String) async throws -> String {
         // Партия из 50 треков в «Музыку» может идти несколько минут — ждём до 15.

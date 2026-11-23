@@ -729,4 +729,34 @@ enum L {
         t("Send this error to the developer (GitHub or email)", "Отправить эту ошибку разработчику (GitHub или письмо)",
           "Надіслати цю помилку розробнику (GitHub або лист)", "Адправіць гэтую памылку распрацоўшчыку (GitHub або ліст)")
     }
+
+    // Правка тегов
+    static var tagEditMenu: String { t("Edit Tags…", "Изменить теги…", "Змінити теги…", "Змяніць тэгі…") }
+    static func tagEditMenuN(_ n: Int) -> String { t("Edit Tags of \(n) Tracks…", "Изменить теги \(n) треков…", "Змінити теги \(n) треків…", "Змяніць тэгі \(n) трэкаў…") }
+    static var tagEditHint: String { t("Double-click to edit tags", "Двойной клик — изменить теги", "Подвійний клік — змінити теги", "Двайны клік — змяніць тэгі") }
+    static var tagEditTitle: String { t("Edit Tags", "Теги трека", "Теги треку", "Тэгі трэка") }
+    static func tagEditTitleN(_ n: Int) -> String { t("Tags of \(n) tracks", "Теги \(n) треков", "Теги \(n) треків", "Тэгі \(n) трэкаў") }
+    static var tagTitle: String { t("Title", "Название", "Назва", "Назва") }
+    static var tagArtist: String { t("Artist", "Артист", "Виконавець", "Выканаўца") }
+    static var tagAlbum: String { t("Album", "Альбом", "Альбом", "Альбом") }
+    static var tagAlbumArtist: String { t("Album artist", "Артист альбома", "Виконавець альбому", "Выканаўца альбома") }
+    static var tagYear: String { t("Year", "Год", "Рік", "Год") }
+    static var tagGenre: String { t("Genre", "Жанр", "Жанр", "Жанр") }
+    static var tagTrack: String { t("Track #", "№ трека", "№ треку", "№ трэка") }
+    static var tagDisc: String { t("Disc #", "№ диска", "№ диска", "№ дыска") }
+    static var tagMixed: String { t("Mixed", "Разные", "Різні", "Розныя") }
+    static var tagDropCover: String { t("Drop a picture here", "Перетащите картинку сюда", "Перетягніть зображення сюди", "Перацягніце малюнак сюды") }
+    static var tagChooseCover: String { t("Choose…", "Выбрать…", "Вибрати…", "Выбраць…") }
+    static var tagPasteCover: String { t("Paste", "Вставить", "Вставити", "Уставіць") }
+    static var tagSave: String { t("Save to File", "Сохранить в файл", "Зберегти у файл", "Захаваць у файл") }
+    static var tagBusy: String { t("the track is being converted", "трек сейчас конвертируется", "трек зараз конвертується", "трэк зараз канвертуецца") }
+    static var tagCoverUnsupported: String {
+        t("Covers can't be written into OGG/Opus files", "В OGG/Opus обложку записать нельзя", "В OGG/Opus обкладинку записати не можна", "У OGG/Opus вокладку запісаць нельга")
+    }
+    static var tagEditNote: String {
+        t("Changes are written into the file itself without re-encoding; the original is replaced only after a check. If Music is open, the track there is updated too. Empty field = remove the tag.",
+          "Изменения записываются прямо в файл без перекодирования; оригинал заменяется только после проверки. Если открыта «Музыка», трек обновится и там. Пустое поле — удалить тег.",
+          "Зміни записуються просто у файл без перекодування; оригінал замінюється лише після перевірки. Якщо відкрита «Музика», трек оновиться і там. Порожнє поле — видалити тег.",
+          "Змены запісваюцца проста ў файл без перакадавання; арыгінал замяняецца толькі пасля праверкі. Калі адкрыта «Музыка», трэк абновіцца і там. Пустое поле — выдаліць тэг.")
+    }
 }

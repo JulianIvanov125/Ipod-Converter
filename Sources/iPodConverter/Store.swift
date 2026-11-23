@@ -272,6 +272,14 @@ final class Store {
     /// Дубликаты: какой файл оставить в группе (выбран вручную) и какие лишние копии отмечены.
     var dupKeep: [String: UUID] = [:]
     var dupSelection: Set<UUID> = []
+    /// Треки в окне правки тегов (пусто — окно закрыто).
+    var tagEditTracks: [TrackItem] = []
+
+    /// Правка тегов: если трек отмечен вместе с другими — все отмеченные, иначе только он.
+    func editTags(_ t: TrackItem) {
+        let checked = tracks.filter { $0.isChecked && $0.info != nil }
+        tagEditTracks = t.isChecked && checked.count > 1 ? checked : [t]
+    }
     /// Поиск по трекам (латиница = кириллица, неверная раскладка).
     var trackSearch = ""
     /// Сортировка списка треков; nil — в порядке добавления.
@@ -558,6 +566,7 @@ final class Store {
             return self.isFavorite(.classic55G) && !self.isFavorite(.classic5G)
         }
         detector.onDisconnect = { [weak self] m in self?.iPodDisconnected(m) }
+        MusicRefresher.shared.onMoved = { [weak self] old, new in self?.trackMoved(from: old, to: new) }
         // Не в самотестах — им опрос USB ни к чему.
         if !CommandLine.arguments.contains(where: { $0.hasPrefix("--selftest") }) {
             DispatchQueue.main.async { detector.start() }
@@ -828,6 +837,24 @@ final class Store {
         musicQueue.removeAll()
         for t in queued { t.cancel() }
         for t in tracks where t.isConverting { t.cancel() }
+    }
+
+    /// Файл трека переименовали («Музыка» упорядочила медиатеку) — подменяем трек в списке на новый путь.
+    func trackMoved(from old: URL, to new: URL) {
+        guard let i = tracks.firstIndex(where: { $0.url.standardizedFileURL == old.standardizedFileURL }),
+              !tracks.contains(where: { $0.url.standardizedFileURL == new.standardizedFileURL }) else { return }
+        let was = tracks[i]
+        guard !was.isActive else { return }
+        let t = TrackItem(url: new)
+        t.viewModel = was.viewModel
+        t.isChecked = was.isChecked
+        t.musicPersistentID = was.musicPersistentID
+        t.artwork = was.artwork
+        tracks[i] = t
+        Task {
+            await t.load()
+            if was.rating != (t.info?.rating ?? 0) { t.rating = was.rating }
+        }
     }
 
     func removeTrack(_ t: TrackItem) {

@@ -103,6 +103,9 @@ struct MusicSection: View {
                 }
                 footer
             }
+            .sheet(isPresented: Binding(get: { !store.tagEditTracks.isEmpty }, set: { if !$0 { store.tagEditTracks = [] } })) {
+                TagEditorView(tracks: store.tagEditTracks)
+            }
         }
     }
 
@@ -557,7 +560,9 @@ struct TrackRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .help(track.url.path)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { if track.info != nil && !track.isActive { store.editTags(track) } }
+            .help(track.url.path + "\n" + L.tagEditHint)
 
             if let info = track.info {
                 // Тип файла сейчас → формат после конвертации, ⚙︎ — формат именно этого трека.
@@ -587,6 +592,11 @@ struct TrackRow: View {
         .glassCard(RoundedRectangle(cornerRadius: 10), solid: rowFill)
         .foregroundStyle(ink)
         .contextMenu {
+            Button { store.editTags(track) } label: {
+                Label(track.isChecked && store.tracks.filter(\.isChecked).count > 1 ? L.tagEditMenuN(store.tracks.filter(\.isChecked).count) : L.tagEditMenu,
+                      systemImage: "pencil")
+            }
+            .disabled(track.info == nil || track.isActive)
             Button { showFormat = true } label: { Label(L.trackFormatMenu, systemImage: "gearshape") }
                 .disabled(track.info == nil || track.isActive)
             if track.formatOverride != nil {

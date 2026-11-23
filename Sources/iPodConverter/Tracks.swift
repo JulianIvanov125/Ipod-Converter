@@ -404,6 +404,8 @@ final class TrackItem: Identifiable {
         case .success(let w):
             AppLog.info("Tags written: \(url.path) — \(w.markValue)")
             tagsWritten = true
+            // Файл может быть в медиатеке «Музыки» — пусть она перечитает теги и обложку.
+            MusicRefresher.shared.add(url, cover: w.cover ? meta.coverFile : nil)
             tagWriteError = nil
             if var fresh = try? await FFmpeg.probeAudio(url) {
                 fresh.rating = before.rating
