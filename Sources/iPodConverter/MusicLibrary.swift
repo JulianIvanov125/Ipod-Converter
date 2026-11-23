@@ -45,7 +45,9 @@ enum MusicLibrary {
             try
                 tell application "Music"
                     set found to {}
-                    if tName is not "" then
+                    -- Клипы не ищем по названию: у версий для разных iPod оно одинаковое, и версия для одного
+                    -- iPod перепривязывала трек другого к своему файлу (плейлист nano 7 оказывался с файлами 5.5G).
+                    if tName is not "" and not asVideo then
                         try
                             set found to (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
                         end try
@@ -72,7 +74,17 @@ enum MusicLibrary {
                         if t is missing value and tName is not "" then
                             delay 0.5
                             try
-                                set t to item 1 of (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
+                                -- Трек именно с этим файлом; совпадение только по названию — лишь для песен.
+                                set cands to (every file track of library playlist 1 whose name is tName and artist is tArtist and album is tAlbum)
+                                repeat with c in cands
+                                    try
+                                        if POSIX path of (location of c as alias) is (item i of argv) then
+                                            set t to contents of c
+                                            exit repeat
+                                        end if
+                                    end try
+                                end repeat
+                                if t is missing value and not asVideo then set t to item 1 of cands
                                 set pid to persistent ID of t
                                 if pl is not missing value and not (exists (some track of pl whose persistent ID is pid)) then
                                     duplicate t to pl
