@@ -61,6 +61,40 @@ open it and drag **iPod Converter** to Applications.
 
 **Look** — Clear Glass design, light/dark theme, English / Russian / Ukrainian / Belarusian.
 
+## Use with Claude (MCP)
+
+iPod Converter includes an [MCP](https://modelcontextprotocol.io) server, so Claude can use it for you: “what fits on my nano?”, “convert this album for my iPod 5G and put it in a playlist”, “find duplicate tracks in ~/Music/CD”.
+
+Claude Code:
+
+```bash
+claude mcp add ipod-converter -- "/Applications/iPod Converter.app/Contents/MacOS/iPodConverter" --mcp
+```
+
+Claude Desktop — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "ipod-converter": {
+      "command": "/Applications/iPod Converter.app/Contents/MacOS/iPodConverter",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+| Tool | What it does | Changes files |
+|---|---|---|
+| `list_ipods` | Connected iPods: model, name, capacity, free space | No |
+| `inspect_files` | Current format → result for the iPod, estimated size, whether it fits | No |
+| `find_duplicates` | Duplicate tracks: which copy to keep, which are extra | No |
+| `convert` | Converts for the iPod and adds to Music/TV (optionally into a playlist) | Creates new files |
+| `fill_tags` | Fills missing tags and covers from Apple Music into the original files (no re-encoding) | Yes |
+| `trash_duplicates` | Moves extra copies to the Trash (the kept copy is never touched) | Yes |
+
+The server runs without a window and uses the output folder chosen in the app, so open the app once first. Your app settings are not changed.
+
 ## Build from source
 
 Needs Xcode Command Line Tools and Homebrew.

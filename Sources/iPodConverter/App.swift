@@ -18,6 +18,11 @@ struct IPodConverterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = Store()
 
+    init() {
+        // MCP-сервер для Claude и других MCP-клиентов: без окна, общение через stdin/stdout.
+        if CommandLine.arguments.contains("--mcp") { MCPServer.runForever() }
+    }
+
     var body: some Scene {
         WindowGroup("iPod Converter") {
             ContentView(store: store)

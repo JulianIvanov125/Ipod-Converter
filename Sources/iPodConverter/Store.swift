@@ -607,7 +607,7 @@ final class Store {
     ]
 
     /// Раскрывает папки (рекурсивно) в список файлов; из папок берём только аудио и видео.
-    private static func expand(_ urls: [URL]) -> [URL] {
+    static func expand(_ urls: [URL]) -> [URL] {
         let fm = FileManager.default
         var out: [URL] = []
         for url in urls {
