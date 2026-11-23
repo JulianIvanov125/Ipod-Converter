@@ -38,7 +38,7 @@ enum SupportReport {
     }
 
     /// Модель Mac, например «Mac15,9».
-    private static func machine() -> String {
+    static func machine() -> String {
         var size = 0
         sysctlbyname("hw.model", nil, &size, nil, 0)
         var buf = [CChar](repeating: 0, count: max(size, 1))

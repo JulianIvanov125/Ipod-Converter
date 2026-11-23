@@ -401,7 +401,8 @@ final class TrackItem: Identifiable {
         // В списке info уже дополнено найденным — для проверки нужен файл как есть.
         guard let original = try? await FFmpeg.probeAudio(url) else { return }
         switch await TagWriter.write(url: url, info: original, meta: meta) {
-        case .success:
+        case .success(let w):
+            AppLog.info("Tags written: \(url.path) — \(w.markValue)")
             tagsWritten = true
             tagWriteError = nil
             if var fresh = try? await FFmpeg.probeAudio(url) {
@@ -410,6 +411,7 @@ final class TrackItem: Identifiable {
             }
         case .failure(let e):
             tagWriteError = e.message
+            AppLog.error("Tags not written: \(url.path) — \(e.message)")
         }
     }
 
@@ -461,6 +463,7 @@ final class TrackItem: Identifiable {
             }
         } catch {
             base = .failed(error.localizedDescription)
+            AppLog.error("Track not readable: \(url.path) — \(error.localizedDescription)")
         }
     }
 
@@ -514,6 +517,7 @@ final class TrackItem: Identifiable {
                         } else {
                             try? FileManager.default.removeItem(at: output)
                             self.perModel[model] = .failed(FFmpeg.ffmpegOutputLine(stderr))
+                            AppLog.error("Track convert failed: \(self.url.path) [\(model.rawValue)] — \(AppLog.ffmpegTail(stderr))")
                             completion(nil)
                         }
                     }

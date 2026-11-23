@@ -129,6 +129,7 @@ final class VideoItem: Identifiable {
             }
         } catch {
             base = .failed(error.localizedDescription)
+            AppLog.error("Video not readable: \(url.path) — \(error.localizedDescription)")
         }
     }
 
@@ -226,6 +227,7 @@ final class VideoItem: Identifiable {
         } else {
             try? FileManager.default.removeItem(at: output)
             perModel[model] = .failed(FFmpeg.ffmpegOutputLine(stderr))
+            AppLog.error("Video convert failed: \(url.path) [\(model.rawValue)] — \(AppLog.ffmpegTail(stderr))")
         }
     }
 
@@ -408,12 +410,14 @@ final class Store {
 
     /// Подключили iPod: добавляем его вкладку и выбираем (если ничего не конвертируется).
     func iPodConnected(_ m: IPodModel) {
+        AppLog.info("iPod connected: \(m.rawValue)")
         guard !dismissedConnected.contains(m) else { return }
         if !isFavorite(m) { autoTabs.insert(m) }
         if !isBusy || favoriteModels.count == 1 { model = m }
     }
 
     func iPodDisconnected(_ m: IPodModel) {
+        AppLog.info("iPod disconnected: \(m.rawValue)")
         dismissedConnected.remove(m)
     }
 
@@ -759,6 +763,8 @@ final class Store {
         func report(_ ok: [String]) -> String? {
             failures.isEmpty ? nil : SupportReport.text(model: b.model, kind: "music", succeeded: ok, total: musicBatchTotal, failures: failures)
         }
+        AppLog.info("Music batch for \(b.model.rawValue): \(summary)")
+        for f in failures { AppLog.error("Track failed: \(f.file) — \(f.stage): \(f.error)") }
         guard addToMusic, !b.outputs.isEmpty else {
             musicBatchStatus = (summary, b.failed == 0)
             musicReport = report(b.outputs.map { $0.1.url.lastPathComponent })
@@ -810,6 +816,8 @@ final class Store {
                              : summary + " · " + L.addedToMusicPartial(added.count, b.outputs.count)
             musicBatchStatus = (text, allOK)
             musicReport = report(added)
+            AppLog.info("Added to Music: \(added.count) of \(b.outputs.count)" + (playlist.isEmpty ? "" : " (playlist)"))
+            for f in failures where f.stage != "convert" { AppLog.error("Not added to Music: \(f.file) — \(f.error)") }
             Notifier.notify(title: L.musicReady(b.model.title), body: text + ".", fileURL: notifyFile)
         }
     }
@@ -942,6 +950,7 @@ final class Store {
             return nil
         }
         let ok = batchItems.compactMap { v -> String? in if case .done = v.state { return v.url.lastPathComponent }; return nil }
+        AppLog.info("Video batch: \(ok.count) done, \(failures.count) failed of \(b.total)")
         videoReport = failures.isEmpty ? nil
             : SupportReport.text(model: videoBatchModels.first ?? model, kind: "video", succeeded: ok, total: b.total, failures: failures)
         if b.total > 1 {

@@ -4,6 +4,8 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested() { return }
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        AppLog.info("Start iPod Converter \(v) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(SupportReport.machine())")
         AppearanceSettings.shared.apply()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -42,6 +44,12 @@ struct IPodConverterApp: App {
                 Button(L.openVideo) { store.openPanel() }
                     .keyboardShortcut("o")
             }
+            HelpCommands()
         }
+
+        Window(L.fbTitle, id: FeedbackCenter.windowID) {
+            FeedbackView()
+        }
+        .windowResizability(.contentSize)
     }
 }

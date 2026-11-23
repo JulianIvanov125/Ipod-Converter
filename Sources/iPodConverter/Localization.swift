@@ -698,4 +698,35 @@ enum L {
         t("Moved to Trash: \(ok), failed: \(bad).", "Перемещено в Корзину: \(ok), не удалось: \(bad).",
           "Переміщено в Кошик: \(ok), не вдалося: \(bad).", "Перамешчана ў Сметніцу: \(ok), не ўдалося: \(bad).")
     }
+
+    // Сообщить о проблеме
+    static var fbTitle: String { t("Report a Problem", "Сообщить о проблеме", "Повідомити про проблему", "Паведаміць пра праблему") }
+    static var fbMenu: String { t("Report a Problem…", "Сообщить о проблеме…", "Повідомити про проблему…", "Паведаміць пра праблему…") }
+    static var fbBug: String { t("Bug", "Ошибка", "Помилка", "Памылка") }
+    static var fbIdea: String { t("Idea", "Идея", "Ідея", "Ідэя") }
+    static var fbQuestion: String { t("Question", "Вопрос", "Питання", "Пытанне") }
+    static var fbPlaceholderBug: String {
+        t("What happened? What did you do before it?", "Что случилось? Что вы делали перед этим?",
+          "Що сталося? Що ви робили перед цим?", "Што здарылася? Што вы рабілі перад гэтым?")
+    }
+    static var fbPlaceholder: String { t("Your message", "Ваше сообщение", "Ваше повідомлення", "Ваша паведамленне") }
+    static var fbAttach: String {
+        t("Attach diagnostics (app version, macOS, iPod models, recent log)", "Приложить сведения (версия, macOS, модели iPod, последние записи журнала)",
+          "Додати відомості (версія, macOS, моделі iPod, останні записи журналу)", "Дадаць звесткі (версія, macOS, мадэлі iPod, апошнія запісы журнала)")
+    }
+    static var fbWhatIsSent: String { t("What will be sent", "Что будет отправлено", "Що буде надіслано", "Што будзе адпраўлена") }
+    static var fbPrivacy: String {
+        t("Your home folder is replaced with “~”. Nothing is sent automatically: GitHub opens a public issue form in the browser; email opens your mail app with the log attached — you review and send it yourself.",
+          "Домашняя папка заменяется на «~». Ничего не отправляется само: GitHub открывает в браузере форму публичного issue, письмо — почтовую программу с журналом во вложении. Вы проверяете и отправляете сами.",
+          "Домашня тека замінюється на «~». Нічого не надсилається саме: GitHub відкриває в браузері форму публічного issue, лист — поштову програму з журналом у вкладенні. Ви перевіряєте й надсилаєте самі.",
+          "Хатняя папка замяняецца на «~». Нічога не адпраўляецца само: GitHub адкрывае ў браўзеры форму публічнага issue, ліст — паштовую праграму з журналам ва ўкладанні. Вы правяраеце і адпраўляеце самі.")
+    }
+    static var fbShowLog: String { t("Show Log in Finder", "Показать журнал в Finder", "Показати журнал у Finder", "Паказаць журнал у Finder") }
+    static var fbEmail: String { t("Email", "Письмо", "Лист", "Ліст") }
+    static var fbGitHub: String { t("Open on GitHub", "Открыть на GitHub", "Відкрити на GitHub", "Адкрыць на GitHub") }
+    static var fbReportShort: String { t("Report", "Сообщить", "Повідомити", "Паведаміць") }
+    static var fbReportHelp: String {
+        t("Send this error to the developer (GitHub or email)", "Отправить эту ошибку разработчику (GitHub или письмо)",
+          "Надіслати цю помилку розробнику (GitHub або лист)", "Адправіць гэтую памылку распрацоўшчыку (GitHub або ліст)")
+    }
 }

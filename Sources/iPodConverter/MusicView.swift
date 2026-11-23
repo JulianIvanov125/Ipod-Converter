@@ -218,6 +218,7 @@ struct MusicSection: View {
             }
             if let report = store.musicReportForTab {
                 CopyReportButton(text: report)
+                ReportProblemButton(report: report)
             }
 
             Spacer()

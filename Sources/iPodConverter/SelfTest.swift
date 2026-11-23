@@ -15,6 +15,24 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        if args.contains("--selftest-feedback") {
+            Task { @MainActor in
+                AppLog.info("Selftest line with home \(NSHomeDirectory())/Music/song.mp3")
+                for i in 0..<200 { AppLog.error("Filler error \(i) " + String(repeating: "x", count: 80)) }
+                IPodDetector.shared.refreshNow()
+                let fb = FeedbackCenter.shared
+                fb.prepare(report: "iPod: nano 7 · music\nFailed:\n• \(NSHomeDirectory())/Music/a.flac — convert: boom")
+                fb.text = "Конвертация упала\nподробности"
+                let d = fb.diagnostics()
+                print("home in diagnostics: \(d.contains(NSHomeDirectory()))")
+                print(d.split(separator: "\n").prefix(8).joined(separator: "\n"))
+                let u = fb.githubURL()
+                print("github url length: \(u.absoluteString.count), prefix: \(u.absoluteString.prefix(120))")
+                print("log file: \(AppLog.file.path), exists: \(FileManager.default.fileExists(atPath: AppLog.file.path))")
+                exit(0)
+            }
+            return true
+        }
         // --selftest-tags <папка с копиями файлов> <обложка.jpg>: пишет теги в файлы, проверяет пометку и дубли.
         if let i = args.firstIndex(of: "--selftest-tags"), args.count > i + 2 {
             let dir = URL(fileURLWithPath: args[i + 1])

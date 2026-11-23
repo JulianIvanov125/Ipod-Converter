@@ -147,6 +147,7 @@ enum MCPServer {
     }
 
     private static func call(_ name: String, _ args: [String: Any]) async throws -> String {
+        AppLog.info("MCP: \(name)")
         switch name {
         case "list_ipods": return listIPods()
         case "inspect_files": return try await inspect(args)

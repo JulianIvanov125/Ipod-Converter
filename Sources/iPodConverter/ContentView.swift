@@ -192,6 +192,7 @@ struct ContentView: View {
             }
             if let report = store.videoReportForTab, !store.isVideoBusy {
                 CopyReportButton(text: report)
+                ReportProblemButton(report: report)
             }
             if store.isVideoBusy {
                 Button(role: .destructive) {
