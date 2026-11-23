@@ -15,6 +15,47 @@ enum SelfTest {
             SeriesSelfTest.run()
             exit(0)
         }
+        // --selftest-tags <папка с копиями файлов> <обложка.jpg>: пишет теги в файлы, проверяет пометку и дубли.
+        if let i = args.firstIndex(of: "--selftest-tags"), args.count > i + 2 {
+            let dir = URL(fileURLWithPath: args[i + 1])
+            let cover = URL(fileURLWithPath: args[i + 2])
+            setvbuf(stdout, nil, _IOLBF, 0)
+            Task { @MainActor in
+                let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                    .filter { AudioRules.audioExtensions.contains($0.pathExtension.lowercased()) }
+                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                for f in files where f.lastPathComponent.hasPrefix("w-") {
+                    let t = TrackItem(url: f)
+                    await t.load()
+                    let before = t.info!
+                    var meta = FetchedMeta()
+                    meta.fields = ["album": "Selftest Album", "date": "1999", "genre": "Rock"].filter { before.tags[$0.key] == nil }
+                    if before.coverStreamIndex == nil { meta.coverFile = cover }
+                    if meta.isEmpty { print("\(f.lastPathComponent): все теги уже есть — пропуск"); continue }
+                    t.apply(meta)
+                    while t.tagsWritten == false && t.tagWriteError == nil { try? await Task.sleep(nanoseconds: 100_000_000) }
+                    let again = TrackItem(url: f)
+                    await again.load()
+                    let a = again.info!
+                    print("\(f.lastPathComponent): записано=\(t.tagsWritten) ошибка=\(t.tagWriteError ?? "-") | после перезапуска: пометка=\(again.metaStatus) [\(again.fetched?.summary ?? "")] album=\(a.album ?? "-") date=\(a.tags["date"] ?? "-") обложка=\(a.coverStreamIndex != nil) оценка=\(a.rating.map(String.init) ?? "-") кодек=\(before.codec)→\(a.codec) длит=\(String(format: "%.2f→%.2f", before.duration, a.duration)) needsRetag=\(again.needsRetag)")
+                }
+                let st = Store()
+                for f in files where f.lastPathComponent.hasPrefix("d-") { let t = TrackItem(url: f); await t.load(); st.tracks.append(t) }
+                for g in st.duplicateGroups {
+                    print("группа \(g.key): оставим \(g.keeper.url.lastPathComponent), копии: \(g.extras.map(\.url.lastPathComponent))")
+                }
+                st.musicScope = .duplicates
+                print("в списке «Дубликаты»: \(st.visibleTracks.count), лишних \(st.duplicateExtras.count)")
+                st.setAllDuplicatesSelected(true)
+                print("выбрано всё: \(st.selectedDuplicates.count), среди них оставляемые: \(st.selectedDuplicates.filter { s in st.duplicateGroups.contains { $0.keeper.id == s.id } }.count)")
+                // Попытка удалить и оставляемый файл — должен остаться.
+                let keepers = st.duplicateGroups.map(\.keeper)
+                st.trashDuplicates(st.selectedDuplicates + keepers)
+                print("после удаления: \(st.musicBatchStatus?.text ?? "-"), в списке \(st.tracks.count), оставляемые на месте: \(keepers.allSatisfy { FileManager.default.fileExists(atPath: $0.url.path) })")
+                exit(0)
+            }
+            return true
+        }
         if let i = args.firstIndex(of: "--selftest-scope"), args.count > i + 1 {
             let files = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
             Task { @MainActor in

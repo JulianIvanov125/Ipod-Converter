@@ -560,10 +560,10 @@ enum L {
     // Теги из интернета
     static var metaToggle: String { t("Fill tags", "Дополнять теги", "Доповнювати теги", "Дапаўняць тэгі") }
     static var metaHelp: String {
-        t("Missing tags (title, artist, album, track number, year, genre) and covers are filled from the Apple Music catalog (iTunes Search). Existing tags are never overwritten. Only artist, album and title are sent — from tags or, if there are none, from file and folder names.",
-          "Пустые теги (название, артист, альбом, номер трека, год, жанр) и обложки дополняются из каталога Apple Music (iTunes Search). То, что уже есть в файле, не перезаписывается. Отправляются только артист, альбом и название — из тегов, а если их нет, из имени файла и папок.",
-          "Порожні теги (назва, виконавець, альбом, номер треку, рік, жанр) і обкладинки доповнюються з каталогу Apple Music (iTunes Search). Те, що вже є у файлі, не перезаписується. Надсилаються лише виконавець, альбом і назва — з тегів, а якщо їх немає, з назви файлу й тек.",
-          "Пустыя тэгі (назва, выканаўца, альбом, нумар трэка, год, жанр) і вокладкі дапаўняюцца з каталога Apple Music (iTunes Search). Тое, што ўжо ёсць у файле, не перазапісваецца. Адпраўляюцца толькі выканаўца, альбом і назва — з тэгаў, а калі іх няма, з назвы файла і папак.")
+        t("Missing tags (title, artist, album, track number, year, genre) and covers are filled from the Apple Music catalog (iTunes Search). Existing tags are never overwritten. Found tags and covers are written into the file itself without re-encoding (the audio is untouched; the original is replaced only after a check). Only artist, album and title are sent — from tags or, if there are none, from file and folder names.",
+          "Пустые теги (название, артист, альбом, номер трека, год, жанр) и обложки дополняются из каталога Apple Music (iTunes Search). То, что уже есть в файле, не перезаписывается. Найденные теги и обложка записываются прямо в файл без перекодирования (звук не меняется, оригинал заменяется только после проверки). Отправляются только артист, альбом и название — из тегов, а если их нет, из имени файла и папок.",
+          "Порожні теги (назва, виконавець, альбом, номер треку, рік, жанр) і обкладинки доповнюються з каталогу Apple Music (iTunes Search). Те, що вже є у файлі, не перезаписується. Знайдені теги й обкладинка записуються просто у файл без перекодування (звук не змінюється, оригінал замінюється лише після перевірки). Надсилаються лише виконавець, альбом і назва — з тегів, а якщо їх немає, з назви файлу й тек.",
+          "Пустыя тэгі (назва, выканаўца, альбом, нумар трэка, год, жанр) і вокладкі дапаўняюцца з каталога Apple Music (iTunes Search). Тое, што ўжо ёсць у файле, не перазапісваецца. Знойдзеныя тэгі і вокладка запісваюцца проста ў файл без перакадавання (гук не мяняецца, арыгінал замяняецца толькі пасля праверкі). Адпраўляюцца толькі выканаўца, альбом і назва — з тэгаў, а калі іх няма, з назвы файла і папак.")
     }
     static var metaSearching: String { t("Looking for missing tags…", "Ищу недостающие теги…", "Шукаю відсутні теги…", "Шукаю адсутныя тэгі…") }
     static func metaFound(_ what: String) -> String {
@@ -639,4 +639,63 @@ enum L {
     static var chubby: String { t("“fatty”", "«толстенький»", "«товстунчик»", "«тоўсценькі»") }
     static var withCamera: String { t("with camera", "с камерой", "з камерою", "з камерай") }
     static var gb: String { t("GB", "ГБ", "ГБ", "ГБ") }
+
+    // Запись тегов в файл
+    static var metaWrittenToFile: String {
+        t("Written into the file itself (audio untouched).", "Записано в сам файл (звук не тронут).",
+          "Записано в сам файл (звук не змінено).", "Запісана ў сам файл (гук не крануты).")
+    }
+    static func metaNotWritten(_ why: String) -> String {
+        t("Not written into the file: \(why). Will be added to the converted copy.",
+          "В файл не записано: \(why). Будет добавлено в готовую копию.",
+          "У файл не записано: \(why). Буде додано в готову копію.",
+          "У файл не запісана: \(why). Будзе дададзена ў гатовую копію.")
+    }
+    static var metaWriteUnsupported: String { t("this format is not supported", "этот формат не поддерживается", "цей формат не підтримується", "гэты фармат не падтрымліваецца") }
+    static var metaWriteNothing: String { t("nothing to write", "нечего записывать", "нічого записувати", "няма чаго запісваць") }
+    static var metaWriteCheckFailed: String {
+        t("check after writing failed, the original is kept", "проверка после записи не прошла, оригинал оставлен",
+          "перевірка після запису не пройшла, оригінал залишено", "праверка пасля запісу не прайшла, арыгінал пакінуты")
+    }
+    static func metaWriteWouldLose(_ what: String) -> String {
+        t("would lose \(what), the original is kept", "потерялось бы: \(what), оригинал оставлен",
+          "загубилося б: \(what), оригінал залишено", "згубілася б: \(what), арыгінал пакінуты")
+    }
+
+    // Дубликаты
+    static func scopeDuplicates(_ n: Int) -> String { t("Duplicates (\(n))", "Дубликаты (\(n))", "Дублікати (\(n))", "Дублікаты (\(n))") }
+    static var dupNone: String { t("No duplicates in the list", "Дубликатов в списке нет", "Дублікатів у списку немає", "Дублікатаў у спісе няма") }
+    static var dupKeeper: String { t("Keep", "Оставим", "Залишимо", "Пакінем") }
+    static var dupCopy: String { t("Copy", "Копия", "Копія", "Копія") }
+    static var dupKeeperHelp: String {
+        t("This file stays: the best quality in the group. Right-click another copy to keep it instead.",
+          "Этот файл остаётся: лучшее качество в группе. Чтобы оставить другую копию, нажмите на неё правой кнопкой.",
+          "Цей файл залишається: найкраща якість у групі. Щоб залишити іншу копію, натисніть на неї правою кнопкою.",
+          "Гэты файл застаецца: лепшая якасць у групе. Каб пакінуць іншую копію, націсніце на яе правай кнопкай.")
+    }
+    static var dupKeepThis: String { t("Keep this one instead", "Оставить этот вместо", "Залишити цей замість", "Пакінуць гэты замест") }
+    static var dupTrashOne: String { t("Move to Trash", "В Корзину", "У Кошик", "У Сметніцу") }
+    static func dupTrashN(_ n: Int) -> String { t("Move to Trash (\(n))", "В Корзину (\(n))", "У Кошик (\(n))", "У Сметніцу (\(n))") }
+    static var dupSelectAllHelp: String {
+        t("Selects only the extra copies — the file that stays in each group is never selected.",
+          "Выбираются только лишние копии — файл, который остаётся в группе, не выбирается никогда.",
+          "Вибираються лише зайві копії — файл, що залишається в групі, не вибирається ніколи.",
+          "Выбіраюцца толькі лішнія копіі — файл, які застаецца ў групе, не выбіраецца ніколі.")
+    }
+    static func dupTrashConfirmTitle(_ n: Int) -> String {
+        t("Move \(n) copies to Trash?", "Переместить копии в Корзину: \(n)?", "Перемістити копії в Кошик: \(n)?", "Перамясціць копіі ў Сметніцу: \(n)?")
+    }
+    static var dupTrashConfirmText: String {
+        t("One file of each group stays. Files can be restored from the Trash.",
+          "В каждой группе остаётся один файл. Файлы можно вернуть из Корзины.",
+          "У кожній групі залишається один файл. Файли можна повернути з Кошика.",
+          "У кожнай групе застаецца адзін файл. Файлы можна вярнуць са Сметніцы.")
+    }
+    static func dupTrashed(_ n: Int) -> String {
+        t("Moved to Trash: \(n)", "Перемещено в Корзину: \(n)", "Переміщено в Кошик: \(n)", "Перамешчана ў Сметніцу: \(n)")
+    }
+    static func dupTrashFailed(_ ok: Int, _ bad: Int) -> String {
+        t("Moved to Trash: \(ok), failed: \(bad).", "Перемещено в Корзину: \(ok), не удалось: \(bad).",
+          "Переміщено в Кошик: \(ok), не вдалося: \(bad).", "Перамешчана ў Сметніцу: \(ok), не ўдалося: \(bad).")
+    }
 }

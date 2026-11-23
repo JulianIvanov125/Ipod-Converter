@@ -261,12 +261,15 @@ final class VideoItem: Identifiable {
 @Observable
 final class Store {
     enum Section: String { case music, videos }
-    enum MusicScope: String { case all, selected }
+    enum MusicScope: String { case all, selected, duplicates }
 
     var items: [VideoItem] = []
     var tracks: [TrackItem] = []
     var section: Section
     var musicScope: MusicScope = .all
+    /// Дубликаты: какой файл оставить в группе (выбран вручную) и какие лишние копии отмечены.
+    var dupKeep: [String: UUID] = [:]
+    var dupSelection: Set<UUID> = []
     /// Поиск по трекам (латиница = кириллица, неверная раскладка).
     var trackSearch = ""
     /// Сортировка списка треков; nil — в порядке добавления.
@@ -282,6 +285,12 @@ final class Store {
 
     /// То, что видно в списке: после поиска и сортировки. По нему же идут «следующий/предыдущий» в плеере.
     var visibleTracks: [TrackItem] {
+        // «Дубликаты» — группами: оставляемый файл, под ним лишние копии. Сортировка не применяется.
+        if musicScope == .duplicates {
+            return duplicateGroups.filter { g in
+                g.all.contains { t in TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent]) }
+            }.flatMap(\.all)
+        }
         var list = tracks.filter { t in
             // «Выбранные» — показываем только отмеченные; «Все» — весь список (отметки остаются).
             (musicScope == .all || t.isChecked)
@@ -820,6 +829,8 @@ final class Store {
         if let cur = PlayerController.shared.current, !cur.isVideo { PlayerController.shared.close() }
         tracks.removeAll()
         musicScope = .all
+        dupKeep = [:]
+        dupSelection = []
         musicBatchStatus = nil
     }
 

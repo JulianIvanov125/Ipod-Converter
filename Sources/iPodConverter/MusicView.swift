@@ -16,6 +16,43 @@ private enum Col {
 struct MusicSection: View {
     @Bindable var store: Store
     let isTargeted: Bool
+    @State private var confirmTrash = false
+
+    private var emptyText: String {
+        switch store.musicScope {
+        case .duplicates: store.trackSearch.isEmpty ? L.dupNone : L.searchNothing
+        case .selected where !store.tracks.contains(where: \.isChecked): L.nothingChecked
+        default: L.searchNothing
+        }
+    }
+
+    /// Группы дублей: сверху файл, который останется, под ним лишние копии.
+    @ViewBuilder
+    private var duplicateList: some View {
+        let groups = store.duplicateGroups.filter { g in
+            g.all.contains { t in TrackSearch.matches(store.trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent]) }
+        }
+        ForEach(groups) { g in
+            VStack(spacing: 4) {
+                ForEach(g.all) { t in
+                    let keeper = t.id == g.keeper.id
+                    TrackRow(
+                        track: t,
+                        store: store,
+                        model: store.model,
+                        showCheckbox: true,
+                        onRemove: { store.trashDuplicates([t]) },
+                        onCheck: { store.setDuplicateSelected(t, $0) },
+                        onPreview: { store.playTrack(t, converted: $0) },
+                        onRate: { store.setRating(t, stars: $0) },
+                        duplicate: DuplicateRole(isKeeper: keeper, isSelected: store.dupSelection.contains(t.id),
+                                                 onKeep: { store.keepDuplicate(t) })
+                    )
+                }
+            }
+            .padding(.bottom, 8)
+        }
+    }
 
     var body: some View {
         if store.tracks.isEmpty {
@@ -29,11 +66,14 @@ struct MusicSection: View {
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         if store.visibleTracks.isEmpty {
-                            Text(store.musicScope == .selected && !store.tracks.contains(where: \.isChecked) ? L.nothingChecked : L.searchNothing)
+                            Text(emptyText)
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 30)
                         }
+                        if store.musicScope == .duplicates {
+                            duplicateList
+                        } else {
                         ForEach(store.visibleTracks) { t in
                             TrackRow(
                                 track: t,
@@ -45,6 +85,7 @@ struct MusicSection: View {
                                 onPreview: { store.playTrack(t, converted: $0) },
                                 onRate: { store.setRating(t, stars: $0) }
                             )
+                        }
                         }
                     }
                     .padding(.horizontal, 24)
@@ -69,17 +110,28 @@ struct MusicSection: View {
             Picker("", selection: $store.musicScope) {
                 Text(L.scopeAll(store.tracks.count)).tag(Store.MusicScope.all)
                 Text(L.scopeSelected(store.tracks.filter(\.isChecked).count)).tag(Store.MusicScope.selected)
+                Text(L.scopeDuplicates(store.duplicateExtras.count)).tag(Store.MusicScope.duplicates)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
             .disabled(store.isMusicBusy)
 
-            let allChecked = !store.visibleTracks.isEmpty && store.visibleTracks.allSatisfy(\.isChecked)
-            Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllChecked(!allChecked) }
-                .buttonStyle(.link)
-                .font(.system(size: 12))
-                .disabled(store.isMusicBusy)
+            if store.musicScope == .duplicates {
+                let extras = store.visibleTracks.filter { t in store.duplicateExtras.contains { $0.id == t.id } }
+                let allOn = !extras.isEmpty && extras.allSatisfy { store.dupSelection.contains($0.id) }
+                Button(allOn ? L.uncheckAll : L.checkAll) { store.setAllDuplicatesSelected(!allOn) }
+                    .buttonStyle(.link)
+                    .font(.system(size: 12))
+                    .disabled(extras.isEmpty)
+                    .help(L.dupSelectAllHelp)
+            } else {
+                let allChecked = !store.visibleTracks.isEmpty && store.visibleTracks.allSatisfy(\.isChecked)
+                Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllChecked(!allChecked) }
+                    .buttonStyle(.link)
+                    .font(.system(size: 12))
+                    .disabled(store.isMusicBusy)
+            }
 
             Spacer()
             MetaToggle()
@@ -198,7 +250,23 @@ struct MusicSection: View {
             if let p = store.musicBatchProgress {
                 BatchProgress(done: p.done, total: p.total, fraction: p.fraction)
             }
-            if store.isMusicBusy {
+            if store.musicScope == .duplicates {
+                let sel = store.selectedDuplicates
+                Button(role: .destructive) {
+                    confirmTrash = true
+                } label: {
+                    Label(L.dupTrashN(sel.count), systemImage: "trash")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(sel.isEmpty)
+                .alert(L.dupTrashConfirmTitle(sel.count), isPresented: $confirmTrash) {
+                    Button(L.dupTrashN(sel.count), role: .destructive) { store.trashDuplicates(sel) }
+                    Button(L.cancel, role: .cancel) {}
+                } message: {
+                    Text(L.dupTrashConfirmText)
+                }
+            } else if store.isMusicBusy {
                 Button(role: .destructive) {
                     store.cancelMusic()
                 } label: {
@@ -397,6 +465,8 @@ struct TrackRow: View {
     let onCheck: (Bool) -> Void
     let onPreview: (Bool) -> Void
     let onRate: (Int) -> Void
+    /// В режиме «Дубликаты»: этот файл остаётся или это лишняя копия.
+    var duplicate: DuplicateRole? = nil
     @State private var confirmRemove = false
     @State private var showFormat = false
     @State private var hoverArt = false
@@ -408,7 +478,19 @@ struct TrackRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if showCheckbox {
+            if let d = duplicate {
+                if d.isKeeper {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                        .frame(width: 18)
+                        .help(L.dupKeeperHelp)
+                } else {
+                    Toggle("", isOn: Binding(get: { d.isSelected }, set: { onCheck($0) }))
+                        .toggleStyle(.checkbox)
+                        .labelsHidden()
+                        .frame(width: 18)
+                }
+            } else if showCheckbox {
                 Toggle("", isOn: Binding(get: { track.isChecked }, set: { onCheck($0) }))
                     .toggleStyle(.checkbox)
                     .labelsHidden()
@@ -446,11 +528,29 @@ struct TrackRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     metaBadge
+                    if let d = duplicate {
+                        Text(d.isKeeper ? L.dupKeeper : L.dupCopy)
+                            .font(.system(size: 9, weight: .bold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(d.isKeeper ? Color.green : Color.orange)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(RoundedRectangle(cornerRadius: 3).fill((d.isKeeper ? Color.green : Color.orange).opacity(0.12)))
+                    }
                 }
+                if duplicate != nil {
+                    // У копий одинаковые артист и название — различаются местом на диске.
+                    Text((track.url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath + "/" + track.url.lastPathComponent)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
                 Text(track.info?.artist ?? L.unknownArtist)
                     .font(.system(size: 12))
                     .foregroundStyle(track.info?.artist == nil ? .tertiary : .secondary)
                     .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .help(track.url.path)
@@ -490,6 +590,11 @@ struct TrackRow: View {
             }
             Divider()
             Button(action: track.revealInFinder) { Label(track.isDone ? L.showResultInFinder : L.showOriginalInFinder, systemImage: "folder") }
+            if let d = duplicate, !d.isKeeper {
+                Divider()
+                Button(action: d.onKeep) { Label(L.dupKeepThis, systemImage: "checkmark.seal") }
+                Button(role: .destructive, action: onRemove) { Label(L.dupTrashOne, systemImage: "trash") }
+            }
         }
         .alert(L.areYouSure, isPresented: $confirmRemove) {
             Button(L.stopAndRemove, role: .destructive, action: onRemove)
@@ -558,7 +663,8 @@ struct TrackRow: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
-                .help(L.metaFound(track.fetched?.summary ?? ""))
+                .help(L.metaFound(track.fetched?.summary ?? "") + "\n"
+                      + (track.tagsWritten ? L.metaWrittenToFile : track.tagWriteError.map(L.metaNotWritten) ?? ""))
         case .notFound:
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10))
@@ -635,6 +741,22 @@ struct TrackRow: View {
             }
             .buttonStyle(.plain)
             .help(track.isDone ? L.showResultInFinder : L.showOriginalInFinder)
+            if let d = duplicate {
+                if d.isKeeper {
+                    Color.clear.frame(width: 20, height: 20)
+                } else {
+                    Button(action: onRemove) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.red.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(track.isActive)
+                    .help(L.dupTrashOne)
+                }
+            } else {
             Button {
                 if track.isConverting { confirmRemove = true } else { onRemove() }
             } label: {
@@ -646,7 +768,15 @@ struct TrackRow: View {
             }
             .buttonStyle(.plain)
             .help(L.removeFromList)
+            }
         }
         .font(.system(size: 13))
     }
+}
+
+/// Роль строки в режиме «Дубликаты».
+struct DuplicateRole {
+    let isKeeper: Bool
+    let isSelected: Bool
+    let onKeep: () -> Void
 }
