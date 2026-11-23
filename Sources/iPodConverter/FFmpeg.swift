@@ -160,7 +160,7 @@ enum FFmpeg {
     // MARK: - Конвертация
 
     static func arguments(input: URL, output: URL, info: MediaInfo, settings model: EncodeSettings,
-                          cover: URL?, meta: VideoMeta? = nil) -> [String] {
+                          cover: URL?, meta: VideoMeta? = nil, ipod: String? = nil) -> [String] {
         let size = model.outputSize(for: info)
         var args = ["-hide_banner", "-nostdin", "-y"] + decodeArgs(info) + ["-i", input.path]
         if let cover { args += ["-i", cover.path] }
@@ -198,17 +198,21 @@ enum FFmpeg {
             args += ["-filter:a:0", "alimiter=limit=0.891:level=false",
                      "-c:a", enc, "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)", "-ac", "2"]
         }
-        if let meta { args += metadataArguments(meta) }
+        if let meta { args += metadataArguments(meta, ipod: ipod) }
         args += ["-movflags", "+faststart", "-f", model.container.muxer, "-progress", "pipe:1", "-nostats", output.path]
         return args
     }
 
     /// Теги iTunes: тип (stik), шоу/сезон/серия для сериалов, артист для клипов, год для фильмов.
-    static func metadataArguments(_ m: VideoMeta) -> [String] {
+    /// ipod — название iPod («iPod nano 7»): у клипа это альбом. «Музыка» при добавлении считает файлы
+    /// с одинаковыми названием/артистом/альбомом одним треком и вместо версии для второго iPod
+    /// возвращает уже добавленную версию первого — разный альбом держит их отдельными треками.
+    static func metadataArguments(_ m: VideoMeta, ipod: String? = nil) -> [String] {
         func md(_ k: String, _ v: String) -> [String] { ["-metadata", "\(k)=\(v)"] }
         switch m.category {
         case .musicVideo:
             return md("media_type", "6") + md("title", m.title) + md("artist", m.artist)
+                + (ipod.map { md("album", $0) } ?? [])
         case .film:
             var a = md("media_type", "9") + md("title", m.title)
             if !m.year.isEmpty { a += md("date", m.year) }

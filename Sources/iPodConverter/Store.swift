@@ -156,7 +156,8 @@ final class VideoItem: Identifiable {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let output = Self.uniqueURL(in: folder, base: "\(base) [\(model.fileSuffix)]", ext: settings.container.rawValue)
         let cover = coverFile.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
-        let args = FFmpeg.arguments(input: url, output: output, info: info, settings: settings, cover: cover, meta: meta)
+        let args = FFmpeg.arguments(input: url, output: output, info: info, settings: settings, cover: cover, meta: meta,
+                                   ipod: model.playlistName)
         usedMeta = meta
 
         let job = ConversionJob()
