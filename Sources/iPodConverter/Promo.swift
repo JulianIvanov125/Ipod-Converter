@@ -39,7 +39,9 @@ enum Promo {
         let savedLyrics = LyricsStore.shared.visible
         LyricsStore.shared.visible = true
         LyricsView.staticRender = true   // ImageRenderer не рисует прокрутку — строки без неё
-        defer {
+        // Не defer: run заканчивается exit(0), а defer при exit не срабатывает — настройки оставались изменёнными
+        // (так у пользователя выключилось «Дополнять теги»).
+        let restore = {
             LyricsStore.shared.visible = savedLyrics
             fetcher.enabled = savedFetch
             VisualizerSettings.shared.style = savedStyle
@@ -139,6 +141,8 @@ enum Promo {
             PromoClock.shared.t = nil
         }
         pc.togglePlay()
+        restore()
+        UserDefaults.standard.synchronize()
         exit(0)
     }
 }

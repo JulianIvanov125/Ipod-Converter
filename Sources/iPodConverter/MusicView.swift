@@ -153,7 +153,7 @@ struct MusicSection: View {
                 .disabled(store.isMusicBusy || store.tracks.isEmpty)
                 .help(L.coverRepairHelp)
             }
-            MetaToggle()
+            MetaToggle(store: store)
             Button(L.clearList) { store.clearTracks() }
                 .buttonStyle(.link)
                 .font(.system(size: 12))
@@ -342,11 +342,16 @@ struct SearchBox: View {
 
 /// Дополнять пустые теги и обложки из Apple Music.
 struct MetaToggle: View {
+    var store: Store
     @Bindable private var fetcher = MetadataFetcher.shared
 
     var body: some View {
         Toggle(isOn: $fetcher.enabled) {
             Label(L.metaToggle, systemImage: "sparkles").font(.system(size: 12))
+        }
+        // Включили — дополняем и уже добавленные треки, а не только новые.
+        .onChange(of: fetcher.enabled) { _, on in
+            if on { store.tracks.forEach { MetadataFetcher.shared.enqueue($0) } }
         }
         .toggleStyle(.checkbox)
         .controlSize(.small)
