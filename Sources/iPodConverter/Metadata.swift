@@ -11,8 +11,10 @@ struct FetchedMeta: Equatable {
     /// Обложка 1200×1200 во временной папке.
     var coverFile: URL?
     var source = "Apple Music"
+    /// Обложка уже записана в файл (пометка восстановлена после перезапуска).
+    var coverAdded = false
 
-    var isEmpty: Bool { fields.isEmpty && coverFile == nil }
+    var isEmpty: Bool { fields.isEmpty && coverFile == nil && !coverAdded }
 }
 
 enum MetaStatus: Equatable { case idle, searching, found, notFound }
@@ -121,7 +123,7 @@ final class MetadataFetcher {
     }
 
     func enqueue(_ t: TrackItem) {
-        guard enabled, let info = t.info else { return }
+        guard enabled, let info = t.info, t.metaStatus == .idle else { return }
         // Есть всё главное — не трогаем (номер диска/исполнитель альбома сами по себе не повод лезть в сеть).
         let need = Self.missing(info).filter { !["disc", "album_artist"].contains($0) }
         guard !need.isEmpty else { return }
@@ -361,7 +363,7 @@ extension FetchedMeta {
     var summary: String {
         let order = ["title", "artist", "album", "album_artist", "track", "disc", "date", "genre"]
         var names = order.filter { fields[$0] != nil }.map(L.metaField)
-        if coverFile != nil { names.append(L.metaField("cover")) }
+        if coverFile != nil || coverAdded { names.append(L.metaField("cover")) }
         return names.joined(separator: ", ")
     }
 }

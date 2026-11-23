@@ -372,11 +372,36 @@ final class TrackItem: Identifiable {
         if info?.album == nil { info?.album = meta.fields["album"] }
         for (k, v) in meta.fields where info?.tags[k] == nil { info?.tags[k] = v }
         if artwork == nil, let f = meta.coverFile, let img = NSImage(contentsOf: f) { artwork = img }
+        Task { await writeTagsToFile() }
+    }
+
+    /// Найденное записано в сам файл (без перекодирования).
+    var tagsWritten = false
+    /// Не удалось записать в файл — найденное попадёт только в готовый файл при конвертации.
+    var tagWriteError: String?
+
+    /// Пишем найденные теги и обложку прямо в исходный файл: звук не трогаем, пометка остаётся в файле.
+    func writeTagsToFile() async {
+        guard let meta = fetched, !meta.isEmpty, !tagsWritten, !isActive, let before = info else { return }
+        // В списке info уже дополнено найденным — для проверки нужен файл как есть.
+        guard let original = try? await FFmpeg.probeAudio(url) else { return }
+        switch await TagWriter.write(url: url, info: original, meta: meta) {
+        case .success:
+            tagsWritten = true
+            tagWriteError = nil
+            if var fresh = try? await FFmpeg.probeAudio(url) {
+                fresh.rating = before.rating
+                info = fresh
+            }
+        case .failure(let e):
+            tagWriteError = e.message
+        }
     }
 
     /// Подходящий по формату файл, но с найденными тегами/обложкой: переупаковка без перекодирования.
+    /// Если теги уже записаны в оригинал, переупаковывать нечего — файл просто копируется.
     var needsRetag: Bool {
-        guard let f = fetched, !f.isEmpty else { return false }
+        guard let f = fetched, !f.isEmpty, !tagsWritten || (f.coverFile != nil && info?.coverStreamIndex == nil) else { return false }
         return ["mp3", "m4a", "m4b", "mp4"].contains(url.pathExtension.lowercased())
     }
 
@@ -396,6 +421,12 @@ final class TrackItem: Identifiable {
             let info = try await FFmpeg.probeAudio(url)
             self.info = info
             rating = info.rating ?? 0
+            // Теги уже дописывались раньше — возвращаем пометку «Дополнено из Apple Music».
+            if let restored = MetaMarks.restore(url: url, info: info) {
+                fetched = restored
+                metaStatus = .found
+                tagsWritten = true
+            }
             base = .ready
             if let idx = info.coverStreamIndex {
                 artwork = await FFmpeg.coverThumbnail(url, index: idx)
