@@ -343,6 +343,14 @@ final class DropField {
 
 // MARK: - Вид
 
+/// Внешние часы для съёмки кадров (ImageRenderer не продвигает TimelineView). nil — обычный режим.
+@MainActor
+@Observable
+final class PromoClock {
+    static let shared = PromoClock()
+    var t: Double?
+}
+
 struct AudioVisualizer: View {
     let style: VisualizerStyle
     let colors: CoverColors
@@ -352,6 +360,14 @@ struct AudioVisualizer: View {
     @State private var water = WaterSurface()
 
     var body: some View {
+        if let t = PromoClock.shared.t {
+            Canvas { (ctx: inout GraphicsContext, size: CGSize) in render(&ctx, size: size, t: t) }
+        } else {
+            live
+        }
+    }
+
+    private var live: some View {
         // Во время игры — с частотой экрана (60 Гц, 120 Гц на ProMotion); сглаживание считается по времени,
         // поэтому реакция одинаковая. На паузе — 20 кадров/с: всё плавно гаснет и почти не нагружает Mac.
         TimelineView(.animation(minimumInterval: PlayerController.shared.isPlaying ? nil : 1.0 / 20)) { (timeline: TimelineViewDefaultContext) in

@@ -4,6 +4,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested() { return }
+        if Promo.runIfRequested() { return }
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         MusicRefresher.shared.start()
         AppLog.info("Start iPod Converter \(v) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(SupportReport.machine())")

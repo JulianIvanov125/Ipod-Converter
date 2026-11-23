@@ -230,7 +230,30 @@ struct LyricsView: View {
         }
     }
 
+    /// Для снимков (ImageRenderer не рисует ScrollView): строки вокруг текущей без прокрутки.
+    nonisolated(unsafe) static var staticRender = false
+
+    @ViewBuilder
     private func synced(_ l: Lyrics) -> some View {
+        if Self.staticRender { syncedStatic(l) } else { syncedScroll(l) }
+    }
+
+    private func syncedStatic(_ l: Lyrics) -> some View {
+        let active = l.index(at: controller.currentTime + 0.25) ?? 0
+        let from = max(0, active - 3), to = min(l.lines.count, active + 6)
+        return VStack(alignment: .leading, spacing: 18) {
+            ForEach(from..<to, id: \.self) { i in
+                LyricLineView(text: l.lines[i].text, distance: i - active)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.15),
+                                     .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                             startPoint: .top, endPoint: .bottom))
+    }
+
+    private func syncedScroll(_ l: Lyrics) -> some View {
         let active = l.index(at: controller.currentTime + 0.25)
         return ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {

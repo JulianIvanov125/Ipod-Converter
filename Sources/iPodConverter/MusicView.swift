@@ -492,6 +492,7 @@ struct TrackRow: View {
     @State private var showFormat = false
     @State private var hoverArt = false
     @State private var hoverStar = 0
+    @State private var hoverPencil = false
 
     private var isPlayingHere: Bool {
         PlayerController.shared.current.map { $0.id.hasSuffix(track.id.uuidString) } ?? false
@@ -549,6 +550,21 @@ struct TrackRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     metaBadge
+                    // Карандаш — правка тегов и обложки (то же, что двойной клик и пункт меню).
+                    if track.info != nil {
+                        Button { store.editTags(track) } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(hoverPencil ? Color.accentColor : Color.secondary)
+                                .frame(width: 18, height: 18)
+                                .background(Circle().fill(Theme.tint(hoverPencil ? 0.08 : 0)))
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hoverPencil = $0 }
+                        .disabled(track.isActive)
+                        .help(L.tagEditMenu)
+                    }
                     if let d = duplicate {
                         Text(d.isKeeper ? L.dupKeeper : L.dupCopy)
                             .font(.system(size: 9, weight: .bold))
