@@ -80,11 +80,11 @@ final class IPodDetector {
         let prefer = preferEnhanced5G(), overrides = Self.savedOverrides()
         Self.queue.async {
             let r = Self.scan(preferEnhanced5G: prefer, overrides: overrides)
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    IPodDetector.shared.scanning = false
-                    IPodDetector.shared.apply(r)
-                }
+            // Task, а не main.async + assumeIsolated: в режиме MCP после dispatchMain главную очередь
+            // обслуживает не главный поток — assumeIsolated валил процесс.
+            Task { @MainActor in
+                IPodDetector.shared.scanning = false
+                IPodDetector.shared.apply(r)
             }
         }
     }

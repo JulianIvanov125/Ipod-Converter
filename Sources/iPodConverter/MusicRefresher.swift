@@ -39,10 +39,8 @@ final class MusicRefresher {
         ) { note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             guard app?.bundleIdentifier == "com.apple.Music" else { return }
-            MainActor.assumeIsolated {
-                // Дать «Музыке» загрузить медиатеку, прежде чем спрашивать её.
-                MusicRefresher.shared.schedule(after: 8)
-            }
+            // Дать «Музыке» загрузить медиатеку, прежде чем спрашивать её. (Task — см. IPodDetector.refresh.)
+            Task { @MainActor in MusicRefresher.shared.schedule(after: 8) }
         }
         if !pending.isEmpty {
             AppLog.info("Music updates waiting from last time: \(pending.count)")
