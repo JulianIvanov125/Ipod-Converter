@@ -131,6 +131,9 @@ enum MCPServer {
             tool("fill_tags", "Fill missing tags",
                  "Looks up missing tags (album, year, genre, track number, cover) in the Apple Music catalog and writes them into the original files without re-encoding. Existing tags are never overwritten; a file is replaced only after a check.",
                  ["paths": paths], ["paths"], readOnly: false, destructive: true),
+            tool("repair_music_covers", "Re-apply covers in Music",
+                 "For tracks that are in the Music library: sets each track's artwork in Music again from the cover embedded in its file. Fixes albums that Music shows grey although the tracks have artwork. Music rewrites the files' artwork (same picture, audio unchanged).",
+                 ["paths": paths], ["paths"], readOnly: false),
             tool("trash_duplicates", "Move duplicate copies to Trash",
                  "Moves the extra copies found by find_duplicates to the Trash. The file kept in each group is never touched. Pass 'only' to trash just some of the extra copies.",
                  ["paths": paths,
@@ -155,6 +158,7 @@ enum MCPServer {
         case "convert": return try await convert(args)
         case "fill_tags": return try await fillTags(args)
         case "trash_duplicates": return try await trashDuplicates(args)
+        case "repair_music_covers": return try await repairCovers(args)
         default: throw ToolError("Unknown tool: \(name)")
         }
     }
@@ -282,6 +286,14 @@ enum MCPServer {
             lines.append("Not an extra copy (left alone): " + skipped.sorted().joined(separator: ", "))
         }
         if !failed.isEmpty { lines.append("Failed: \(failed.count)"); lines += failed.map { "  \($0)" } }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func repairCovers(_ args: [String: Any]) async throws -> String {
+        let (tracks, _, _) = try await load(args)
+        let r = await CoverRepair.run(tracks) { _, _ in }
+        var lines = ["Covers re-applied in Music: \(r.done), not in the Music library: \(r.notInLibrary), no cover in the file: \(r.noCover), failed: \(r.failed.count)"]
+        lines += r.failed.prefix(30).map { "  \($0)" }
         return lines.joined(separator: "\n")
     }
 

@@ -272,6 +272,21 @@ final class Store {
     /// Дубликаты: какой файл оставить в группе (выбран вручную) и какие лишние копии отмечены.
     var dupKeep: [String: UUID] = [:]
     var dupSelection: Set<UUID> = []
+    /// «Обложки → «Музыка»»: сколько из скольких (nil — не идёт).
+    var coverRepairProgress: (done: Int, total: Int)?
+
+    /// Поставить в «Музыке» заново обложки отмеченных треков (или всех в списке).
+    func repairCovers() {
+        let list = tracksInScope.filter { $0.info != nil }
+        guard !list.isEmpty, coverRepairProgress == nil else { return }
+        coverRepairProgress = (0, list.count)
+        Task {
+            let r = await CoverRepair.run(list) { done, total in self.coverRepairProgress = (done, total) }
+            coverRepairProgress = nil
+            musicBatchStatus = (L.coverRepairDone(r.done, r.notInLibrary, r.noCover, r.failed.count), r.failed.isEmpty)
+        }
+    }
+
     /// Треки в окне правки тегов (пусто — окно закрыто).
     var tagEditTracks: [TrackItem] = []
 

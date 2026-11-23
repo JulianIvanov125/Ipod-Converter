@@ -763,4 +763,21 @@ enum L {
     static func alreadyInMusic(_ n: Int) -> String {
         t("already in Music: \(n)", "уже в «Музыке»: \(n)", "уже в «Музиці»: \(n)", "ужо ў «Музыцы»: \(n)")
     }
+
+    // Обложки → «Музыка»
+    static var coverRepairButton: String { t("Covers → Music", "Обложки → «Музыка»", "Обкладинки → «Музика»", "Вокладкі → «Музыка»") }
+    static var coverRepairHelp: String {
+        t("Music sometimes shows an album grey although its tracks have covers. This sets each track's cover in Music again from its file (checked tracks, or all in the list). Music rewrites the files' artwork: same picture, audio unchanged.",
+          "«Музыка» иногда показывает альбом серым, хотя у треков есть обложки. Эта кнопка заново ставит каждому треку в «Музыке» его обложку из файла (отмеченным или всем в списке). «Музыка» перезапишет обложку в файлах: та же картинка, звук не меняется.",
+          "«Музика» іноді показує альбом сірим, хоча в треків є обкладинки. Ця кнопка заново ставить кожному треку в «Музиці» його обкладинку з файлу (позначеним або всім у списку). «Музика» перезапише обкладинку у файлах: те саме зображення, звук не змінюється.",
+          "«Музыка» часам паказвае альбом шэрым, хоць у трэкаў ёсць вокладкі. Гэтая кнопка нанова ставіць кожнаму трэку ў «Музыцы» яго вокладку з файла (адзначаным або ўсім у спісе). «Музыка» перазапіша вокладку ў файлах: той самы малюнак, гук не мяняецца.")
+    }
+    static func coverRepairRunning(_ d: Int, _ n: Int) -> String { t("Covers: \(d) of \(n)", "Обложки: \(d) из \(n)", "Обкладинки: \(d) з \(n)", "Вокладкі: \(d) з \(n)") }
+    static func coverRepairDone(_ ok: Int, _ notIn: Int, _ none: Int, _ bad: Int) -> String {
+        var s = t("Covers updated in Music: \(ok)", "Обложки обновлены в «Музыке»: \(ok)", "Обкладинки оновлено в «Музиці»: \(ok)", "Вокладкі абноўлены ў «Музыцы»: \(ok)")
+        if notIn > 0 { s += t(" · not in Music: \(notIn)", " · нет в «Музыке»: \(notIn)", " · немає в «Музиці»: \(notIn)", " · няма ў «Музыцы»: \(notIn)") }
+        if none > 0 { s += t(" · no cover in file: \(none)", " · без обложки в файле: \(none)", " · без обкладинки у файлі: \(none)", " · без вокладкі ў файле: \(none)") }
+        if bad > 0 { s += t(" · errors: \(bad)", " · ошибок: \(bad)", " · помилок: \(bad)", " · памылак: \(bad)") }
+        return s
+    }
 }

@@ -139,6 +139,20 @@ struct MusicSection: View {
             }
 
             Spacer()
+            if let p = store.coverRepairProgress {
+                ProgressView(value: Double(p.done), total: Double(max(p.total, 1)))
+                    .frame(width: 80)
+                Text(L.coverRepairRunning(p.done, p.total)).font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                Button {
+                    store.repairCovers()
+                } label: {
+                    Label(L.coverRepairButton, systemImage: "photo.on.rectangle.angled").font(.system(size: 12))
+                }
+                .buttonStyle(.link)
+                .disabled(store.isMusicBusy || store.tracks.isEmpty)
+                .help(L.coverRepairHelp)
+            }
             MetaToggle()
             Button(L.clearList) { store.clearTracks() }
                 .buttonStyle(.link)

@@ -228,6 +228,49 @@ enum MusicLibrary {
     end run
     """
 
+    /// Поставить треку в «Музыке» обложку заново (та же картинка из файла). Чинит серые альбомы:
+    /// «Музыка» перестраивает запись обложки. Ответ по файлу: «1» — поставлено, «0» — нет в медиатеке, «ERR:…».
+    static func reapplyArtwork(_ items: [(file: URL, cover: URL)]) async throws -> [String] {
+        guard !items.isEmpty else { return [] }
+        let out = try await run(artworkScript, items.flatMap { [$0.file.path, $0.cover.path] }, app: L.musicApp)
+        return out.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    private static let artworkScript = """
+    on run argv
+        tell application "Music"
+            set allTracks to file tracks of library playlist 1
+            set locs to location of every file track of library playlist 1
+        end tell
+        set paths to {}
+        repeat with l in locs
+            try
+                set end of paths to POSIX path of l
+            on error
+                set end of paths to ""
+            end try
+        end repeat
+        set out to ""
+        repeat with i from 1 to (count argv) by 2
+            set p to item i of argv
+            set c to item (i + 1) of argv
+            set n to 0
+            try
+                repeat with k from 1 to (count paths)
+                    if item k of paths is p then
+                        tell application "Music" to set data of artwork 1 of (item k of allTracks) to (read (POSIX file c) as picture)
+                        set n to 1
+                    end if
+                end repeat
+                set out to out & n & linefeed
+            on error e
+                set out to out & "ERR:" & e & linefeed
+            end try
+        end repeat
+        return out
+    end run
+    """
+
     /// «Музыка» хранит теги и обложку у себя и сама файл не перечитывает. После записи тегов в файл
     /// просим её обновить трек (refresh), а обложку, если её не было, ставим явно.
     /// Ответ по каждому файлу: «сколько треков обновлено|новый путь» или «ERR:…».
