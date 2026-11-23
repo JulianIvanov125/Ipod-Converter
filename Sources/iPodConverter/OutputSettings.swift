@@ -145,7 +145,8 @@ struct OutputSettingsButton: View {
         Button {
             open.toggle()
         } label: {
-            Label(out.enabled ? L.outCustom : L.outPreset(store.model.title),
+            Label(out.enabled ? L.outCustom
+                  : L.outPreset(store.model.title) + (store.model.supportsMax && store.maxQuality ? " · \(L.maximum)" : ""),
                   systemImage: issues.isEmpty ? "gearshape" : "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
                 .lineLimit(1)
@@ -167,6 +168,25 @@ struct OutputSettingsView: View {
         let s = store.currentSettings
         let issues = out.iPodIssues(for: store.model, s)
         VStack(alignment: .leading, spacing: 12) {
+            if store.model.supportsMax {
+                // Пресет iPod: «Стандарт» или «Максимум» — без своих настроек (тот же выбор, что под вкладками iPod).
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L.outPresetQuality(store.model.title)).font(.system(size: 13, weight: .semibold))
+                    Picker("", selection: $store.maxQuality) {
+                        let st = store.model.settings(max: false), mx = store.model.settings(max: true)
+                        Text("\(L.standard) · \(st.w)×\(st.h)").tag(false)
+                        Text("\(L.maximum) · \(mx.w)×\(mx.h)").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(store.isBusy)
+                    Text(L.maxHelp("\(store.model.settings(max: true).w)×\(store.model.settings(max: true).h)",
+                                     String(format: "%.1f", Double(store.model.settings(max: true).maxrateKbps) / 1000)))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Divider()
+            }
             Toggle(isOn: $out.enabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L.outToggle).font(.system(size: 13, weight: .semibold))

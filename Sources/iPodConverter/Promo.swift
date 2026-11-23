@@ -83,6 +83,10 @@ enum Promo {
         while store.items.contains(where: { $0.info == nil }) { await sleep(0.3) }
         await sleep(2.5)
         snap(host, out.appendingPathComponent("2-videos.png"))
+        // Окно «Выход» (настройки видео) — отдельным видом: поповер так не снять.
+        let outView = NSHostingView(rootView: OutputSettingsView(store: store).background(Color(nsColor: .windowBackgroundColor)))
+        outView.frame = NSRect(origin: .zero, size: outView.fittingSize)
+        snap(outView, out.appendingPathComponent("2b-output.png"))
 
         // Редактор тегов (окно-лист)
         store.section = .music

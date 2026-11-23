@@ -213,6 +213,7 @@ enum L {
         t("Type for selected (\(n)):", "Тип для выбранных (\(n)):", "Тип для вибраних (\(n)):", "Тып для выбраных (\(n)):")
     }
     // Свои настройки выхода
+    static func outPresetQuality(_ m: String) -> String { t("\(m) preset", "Пресет \(m)", "Пресет \(m)", "Прэсэт \(m)") }
     static func outPreset(_ m: String) -> String { t("Output: \(m) preset", "Выход: пресет \(m)", "Вихід: пресет \(m)", "Выхад: прэсэт \(m)") }
     static var outCustom: String { t("Output: custom", "Выход: свои настройки", "Вихід: свої налаштування", "Выхад: свае налады") }
     static var outHelp: String { t("Container, codec, resolution, bitrate and audio of converted videos", "Контейнер, кодек, разрешение, битрейт и звук готовых видео", "Контейнер, кодек, роздільність, бітрейт і звук готових відео", "Кантэйнер, кодэк, раздзяляльнасць, бітрэйт і гук гатовых відэа") }
