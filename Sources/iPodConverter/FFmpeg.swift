@@ -192,7 +192,11 @@ enum FFmpeg {
             args += ["-map", "1:0", "-c:v:1", "copy", "-disposition:v:1", "attached_pic"]
         }
         if info.hasAudio {
-            args += ["-c:a", "aac", "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)", "-ac", "2"]
+            // Кодер Apple (AudioToolbox), если есть: встроенный AAC ffmpeg на громких клипах даёт пики до +4 дБ
+            // выше нуля — iPod их обрезает, слышно «пшш/ксс». Ограничитель на −1 дБ оставляет запас.
+            let enc = hasAudioToolboxAAC ? "aac_at" : "aac"
+            args += ["-filter:a:0", "alimiter=limit=0.891:level=false",
+                     "-c:a", enc, "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)", "-ac", "2"]
         }
         if let meta { args += metadataArguments(meta) }
         args += ["-movflags", "+faststart", "-f", model.container.muxer, "-progress", "pipe:1", "-nostats", output.path]
