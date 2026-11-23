@@ -574,7 +574,13 @@ final class Store {
     }
 
     var isBusy: Bool { isVideoBusy || isMusicBusy }
-    var isMusicBusy: Bool { musicRunning > 0 || !musicQueue.isEmpty }
+    var isMusicBusy: Bool { musicRunning > 0 || !musicQueue.isEmpty || musicPreparing }
+    /// Перед пачкой спрашиваем у «Музыки» список её файлов (идёт ~1 с).
+    private(set) var musicPreparing = false
+    /// Файлы медиатеки «Музыки» (путь → persistent ID) на момент запуска пачки.
+    @ObservationIgnored private var libraryIndex: [String: String] = [:]
+    /// Треки пачки, которые уже лежат в медиатеке и подходят iPod: не копируем и не добавляем заново.
+    @ObservationIgnored private var batchInLibrary: [String] = []
 
     /// Принимает файлы и папки: аудио уходит в «Музыку», остальное — в «Видео».
     func add(_ urls: [URL]) {
@@ -715,7 +721,17 @@ final class Store {
             musicBatchIDs.insert(t.id)
         }
         musicBatchTotal = musicBatchIDs.count
-        pumpMusic(folder: folder)
+        batchInLibrary = []
+        libraryIndex = [:]
+        guard addToMusic else { pumpMusic(folder: folder); return }
+        // Треки из медиатеки «Музыки» не должны попадать туда второй раз — узнаём, какие файлы уже там.
+        musicPreparing = true
+        Task {
+            do { libraryIndex = try await MusicLibrary.libraryIndex() }
+            catch { AppLog.error("Music library index failed: \(error.localizedDescription)") }
+            musicPreparing = false
+            pumpMusic(folder: folder)
+        }
     }
 
     private func pumpMusic(folder: URL) {
@@ -734,7 +750,16 @@ final class Store {
                 }
                 self.pumpMusic(folder: folder)
             }
-            if plan == .compatible && !t.needsRetag {
+            if plan == .compatible && !t.needsRetag, let pid = libraryIndex[MusicLibrary.normPath(t.url.path)] {
+                // Уже в «Музыке» и подходит iPod: ничего не копируем, запись в медиатеке не трогаем.
+                musicRunning -= 1
+                t.musicPersistentID = pid
+                t.setMusicError(nil, for: batch.model)
+                t.setState(.kept, for: batch.model)
+                batch.kept += 1
+                batchInLibrary.append(pid)
+                continue
+            } else if plan == .compatible && !t.needsRetag {
                 t.copyAsIs(model: batch.model, into: folder, completion: done)
             } else {
                 t.convert(plan: plan, model: batch.model, into: folder, completion: done)
@@ -761,7 +786,7 @@ final class Store {
     private func finishMusicBatch() {
         let b = batch
         guard b.converted + b.kept + b.failed > 0 else { return }
-        let summary = L.musicSummary(converted: b.converted, kept: b.kept, failed: b.failed)
+        let summary = L.musicSummary(converted: b.converted, kept: b.kept - batchInLibrary.count, failed: b.failed)
         let notifyFile = b.outputs.first?.0 ?? musicFolder
         let batchTracks = tracks.filter { musicBatchIDs.contains($0.id) }
         // Ошибки конвертации: файл и текст ffmpeg.
@@ -774,6 +799,21 @@ final class Store {
         }
         AppLog.info("Music batch for \(b.model.rawValue): \(summary)")
         for f in failures { AppLog.error("Track failed: \(f.file) — \(f.stage): \(f.error)") }
+        let inLibrary = batchInLibrary
+        let summaryFull = inLibrary.isEmpty ? summary : summary + " · " + L.alreadyInMusic(inLibrary.count)
+        if !inLibrary.isEmpty { AppLog.info("Already in Music, not re-added: \(inLibrary.count)") }
+        if addToMusic, b.outputs.isEmpty, !inLibrary.isEmpty {
+            // Всё уже было в медиатеке — только плейлист, если он включён.
+            let playlist = trackPlaylist
+            musicBatchStatus = (summaryFull, b.failed == 0)
+            musicReport = report([])
+            Task {
+                do { try await MusicLibrary.addToPlaylist(inLibrary, playlist: playlist) }
+                catch { musicBatchStatus = (summaryFull + " · " + error.localizedDescription, false) }
+            }
+            Notifier.notify(title: L.musicReady(b.model.title), body: summaryFull, fileURL: notifyFile)
+            return
+        }
         guard addToMusic, !b.outputs.isEmpty else {
             musicBatchStatus = (summary, b.failed == 0)
             musicReport = report(b.outputs.map { $0.1.url.lastPathComponent })
@@ -820,7 +860,12 @@ final class Store {
                     break
                 }
             }
+            if !inLibrary.isEmpty, !playlist.isEmpty {
+                do { try await MusicLibrary.addToPlaylist(inLibrary, playlist: playlist) }
+                catch { failures.append(.init(file: "\(inLibrary.count) tracks", stage: "add to playlist", error: error.localizedDescription)) }
+            }
             let allOK = failures.isEmpty
+            let summary = summaryFull
             let text = allOK ? summary + " · " + (playlist.isEmpty ? L.inLibrary : L.inMusic(playlist))
                              : summary + " · " + L.addedToMusicPartial(added.count, b.outputs.count)
             musicBatchStatus = (text, allOK)

@@ -169,6 +169,65 @@ enum MusicLibrary {
         return out.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
+    /// Файлы медиатеки «Музыки»: путь (NFC) → persistent ID. Одним запросом, ~1 с на 1500 треков.
+    static func libraryIndex() async throws -> [String: String] {
+        let out = try await run(indexScript, [], app: L.musicApp)
+        var d: [String: String] = [:]
+        for line in out.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            guard parts.count == 2, !parts[1].isEmpty else { continue }
+            d[normPath(parts[1])] = parts[0]
+        }
+        return d
+    }
+
+    static func normPath(_ p: String) -> String {
+        URL(fileURLWithPath: p).standardizedFileURL.path.precomposedStringWithCanonicalMapping
+    }
+
+    private static let indexScript = """
+    on run argv
+        tell application "Music"
+            set locs to location of every file track of library playlist 1
+            set ids to persistent ID of every file track of library playlist 1
+        end tell
+        set out to ""
+        repeat with k from 1 to count locs
+            set p to ""
+            try
+                set p to POSIX path of (item k of locs)
+            end try
+            set out to out & (item k of ids) & tab & p & linefeed
+        end repeat
+        return out
+    end run
+    """
+
+    /// Положить треки, которые уже есть в медиатеке, в плейлист (создать, если нет). Повторно не добавляет.
+    static func addToPlaylist(_ persistentIDs: [String], playlist: String) async throws {
+        guard !persistentIDs.isEmpty, !playlist.isEmpty else { return }
+        _ = try await run(playlistScript, [playlist] + persistentIDs, app: L.musicApp)
+    }
+
+    private static let playlistScript = """
+    on run argv
+        set pName to item 1 of argv
+        tell application "Music"
+            if not (exists user playlist pName) then make new user playlist with properties {name:pName}
+            set pl to user playlist pName
+            repeat with i from 2 to count argv
+                set pid to item i of argv
+                try
+                    if not (exists (some track of pl whose persistent ID is pid)) then
+                        duplicate (some track of library playlist 1 whose persistent ID is pid) to pl
+                    end if
+                end try
+            end repeat
+        end tell
+        return ""
+    end run
+    """
+
     /// «Музыка» хранит теги и обложку у себя и сама файл не перечитывает. После записи тегов в файл
     /// просим её обновить трек (refresh), а обложку, если её не было, ставим явно.
     /// Ответ по каждому файлу: «сколько треков обновлено|новый путь» или «ERR:…».
