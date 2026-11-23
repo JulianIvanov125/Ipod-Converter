@@ -126,7 +126,8 @@ enum MCPServer {
                  "Converts the files for the iPod into the app's output folder (music: copied as is when already compatible) and, by default, adds them to Music (tracks) / TV (videos) for syncing. Can take minutes for videos.",
                  ["paths": paths, "model": model,
                   "add_to_library": ["type": "boolean", "description": "Add results to Music/TV. Default: the app's setting."],
-                  "playlist": ["type": "string", "description": "Also put tracks into this Music playlist (created if missing)."]],
+                  "playlist": ["type": "string", "description": "Also put tracks into this Music playlist (created if missing)."],
+                  "max_quality": ["type": "boolean", "description": "Videos: use the iPod's Maximum preset (e.g. 640×480 on iPod 5.5G, 720×480 on nano 7) instead of Standard. Default: the app's setting."]],
                  ["paths"], readOnly: false),
             tool("fill_tags", "Fill missing tags",
                  "Looks up missing tags (album, year, genre, track number, cover) in the Apple Music catalog and writes them into the original files without re-encoding. Existing tags are never overwritten; a file is replaced only after a check.",
@@ -339,12 +340,13 @@ enum MCPServer {
         guard !tracks.isEmpty || !videos.isEmpty else { throw ToolError("No audio or video files found.") }
 
         // Настройки окна приложения не меняем: на время вызова, потом возвращаем как было.
-        let saved = (store.model, store.addToMusic, store.musicToPlaylist, store.musicPlaylist)
+        let saved = (store.model, store.addToMusic, store.musicToPlaylist, store.musicPlaylist, store.maxQuality)
         defer {
             store.model = saved.0; store.addToMusic = saved.1
-            store.musicToPlaylist = saved.2; store.musicPlaylist = saved.3
+            store.musicToPlaylist = saved.2; store.musicPlaylist = saved.3; store.maxQuality = saved.4
         }
         store.model = m
+        if let mq = args["max_quality"] as? Bool { store.maxQuality = mq }
         if let add = args["add_to_library"] as? Bool { store.addToMusic = add }
         if let pl = (args["playlist"] as? String)?.trimmingCharacters(in: .whitespaces), !pl.isEmpty {
             store.musicToPlaylist = true; store.musicPlaylist = pl
@@ -361,7 +363,9 @@ enum MCPServer {
         if !videos.isEmpty { store.convertAll() }
         while store.isBusy { try? await Task.sleep(nanoseconds: 300_000_000) }
 
-        var lines = ["Target: \(m.title) (\(m.rawValue)), output: \(store.rootFolder.path)"]
+        let es = store.currentSettings
+        var lines = ["Target: \(m.title) (\(m.rawValue)), output: \(store.rootFolder.path)"
+                     + (videos.isEmpty ? "" : ", video: \(es.w)×\(es.h) \(es.codecLabel) \(Fmt.kbps(es.videoKbps))")]
         if let s = store.musicBatchStatus { lines.append("Music: \(s.text)") }
         if let s = store.videoBatchStatus { lines.append("Videos: \(s.text)") }
         for t in tracks {

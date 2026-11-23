@@ -54,7 +54,8 @@ final class IPodDetector {
         refreshNow()
         // Опрос раз в 2 с — дёшево и надёжнее, чем подписка на события IOKit из SwiftUI-приложения.
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            MainActor.assumeIsolated { IPodDetector.shared.refresh() }
+            // Не assumeIsolated: в режиме MCP (dispatchMain) таймер срабатывал вне MainActor — процесс падал.
+            Task { @MainActor in IPodDetector.shared.refresh() }
         }
     }
 
