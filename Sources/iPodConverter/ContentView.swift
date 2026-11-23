@@ -246,17 +246,21 @@ struct OutputFolderControl: View {
                     Image(systemName: missing ? "folder.badge.questionmark" : "folder")
                     Text(Self.shortPath(dest))
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .font(.system(size: 12))
             }
             .buttonStyle(.plain)
             .foregroundStyle(missing ? Color.orange : Color.secondary)
-            .fixedSize()
+            // При нехватке места сжимается путь (с «…» в середине), а не кнопка «Изменить…».
+            .layoutPriority(-1)
             .help("\(L.saveTo): \(dest.path)" + (missing ? "\n" + L.folderMissing : "") + "\n" + L.openOutputFolder)
 
             Button(L.changeFolder) { store.chooseOutputFolder() }
                 .buttonStyle(.link)
                 .font(.system(size: 12))
+                .lineLimit(1)
+                .fixedSize()
                 .disabled(store.isBusy)
 
             if !store.isDefaultFolder {
@@ -697,9 +701,11 @@ struct ItemCard: View {
                 Text(item.displayTitle)
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
-                Text(item.info?.artist ?? L.unknownArtist)
+                // Артист из тегов, а если их нет — тот, что разобран из имени файла (он же в поле ниже).
+                let artist = item.info?.artist ?? item.meta.flatMap { $0.artist.isEmpty ? nil : $0.artist }
+                Text(artist ?? L.unknownArtist)
                     .font(.system(size: 13))
-                    .foregroundStyle(item.info?.artist == nil ? .tertiary : .secondary)
+                    .foregroundStyle(artist == nil ? .tertiary : .secondary)
                     .lineLimit(1)
                 Text(item.url.lastPathComponent)
                     .font(.system(size: 11))
@@ -1125,20 +1131,26 @@ struct IPodStorageBadge: View {
         if let dev = IPodDetector.shared.device(for: store.model), let free = dev.freeBytes, let total = dev.totalBytes {
             let need = store.pendingBytes
             let fits = need <= free
-            HStack(spacing: 5) {
-                Image(systemName: need == 0 ? "internaldrive" : fits ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(need == 0 ? Color.secondary : fits ? Color.green : Color.red)
-                Text(L.storageLine(free: Fmt.bytes(free), total: Fmt.bytes(total)))
-                    .foregroundStyle(.secondary)
-                if need > 0 {
-                    Text("· " + L.storageNeed(Fmt.bytes(need)))
-                        .foregroundStyle(fits ? Color.secondary : Color.red)
+            let icon = Image(systemName: need == 0 ? "internaldrive" : fits ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(need == 0 ? Color.secondary : fits ? Color.green : Color.red)
+            // Узкое окно — короче, а не обрезка посередине: «iPod: 3,9 ГБ из 15,8 ГБ · нужно 243 МБ» → «3,9 ГБ · нужно 243 МБ» → значок.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 5) {
+                    icon
+                    Text(L.storageLine(free: Fmt.bytes(free), total: Fmt.bytes(total))).foregroundStyle(.secondary)
+                    if need > 0 { Text("· " + L.storageNeed(Fmt.bytes(need))).foregroundStyle(fits ? Color.secondary : Color.red) }
                 }
+                HStack(spacing: 5) {
+                    icon
+                    Text(Fmt.bytes(free)).foregroundStyle(.secondary)
+                    if need > 0 { Text("· " + L.storageNeed(Fmt.bytes(need))).foregroundStyle(fits ? Color.secondary : Color.red) }
+                }
+                icon
             }
             .font(.system(size: 11).monospacedDigit())
             .lineLimit(1)
-            .truncationMode(.middle)
-            .layoutPriority(-1)          // узкое окно — сжимаемся с многоточием, раскладку не распираем
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(-1)          // узкое окно — уступаем место кнопкам
             .help(fits ? L.storageHelp(dev.name ?? store.model.title)
                        : L.storageNotEnough(Fmt.bytes(need - free)) + "\n" + L.storageHelp(dev.name ?? store.model.title))
         }

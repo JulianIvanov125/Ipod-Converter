@@ -364,6 +364,7 @@ struct MusicOutputButton: View {
         Button { open.toggle() } label: {
             Label(out.isCustom ? L.outMusicSummary(out) : L.outPreset(store.model.title), systemImage: "gearshape")
                 .font(.system(size: 12))
+                .lineLimit(1)
                 .foregroundStyle(out.isCustom ? Color.accentColor : Color.secondary)
         }
         .buttonStyle(.plain)

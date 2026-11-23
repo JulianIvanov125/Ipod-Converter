@@ -148,6 +148,7 @@ struct OutputSettingsButton: View {
             Label(out.enabled ? L.outCustom : L.outPreset(store.model.title),
                   systemImage: issues.isEmpty ? "gearshape" : "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
+                .lineLimit(1)
                 .foregroundStyle(issues.isEmpty ? Color.secondary : Color.orange)
         }
         .buttonStyle(.plain)
