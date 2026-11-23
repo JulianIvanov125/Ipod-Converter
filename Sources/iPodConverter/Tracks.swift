@@ -337,7 +337,22 @@ final class TrackItem: Identifiable {
 
     let id = UUID()
     let url: URL
-    var info: AudioInfo?
+    var info: AudioInfo? {
+        didSet { dupKeyCache = nil }
+    }
+    /// Ключ «артист|название» для поиска дублей — считается один раз (разбор имени файла и папок дорогой).
+    @ObservationIgnored private var dupKeyCache: String??
+    var dupKey: String? {
+        if let c = dupKeyCache { return c }
+        var k: String?
+        if let info {
+            let g = TagGuess.from(url: url, info: info)
+            let title = DuplicateFinder.norm(g.title)
+            k = title.isEmpty ? nil : "\(DuplicateFinder.norm(g.artist))|\(title)"
+        }
+        dupKeyCache = .some(k)
+        return k
+    }
     var artwork: NSImage?
     /// iPod открытой вкладки — для него показываем состояние строки.
     var viewModel: IPodModel?
@@ -405,9 +420,22 @@ final class TrackItem: Identifiable {
         return ["mp3", "m4a", "m4b", "mp4"].contains(url.pathExtension.lowercased())
     }
 
-    init(url: URL) { self.url = url }
+    /// Имя файла без расширения и с ним — считаются один раз (разбор URL дорогой на тысячах треков).
+    let fileBaseName: String
+    let fileName: String
 
-    var displayTitle: String { info?.title ?? url.deletingPathExtension().lastPathComponent }
+    init(url: URL) {
+        self.url = url
+        fileBaseName = url.deletingPathExtension().lastPathComponent
+        fileName = url.lastPathComponent
+    }
+
+    var displayTitle: String { info?.title ?? fileBaseName }
+
+    /// Подходит ли трек под строку поиска.
+    func matches(_ query: String) -> Bool {
+        TrackSearch.matches(query, in: [displayTitle, info?.artist, info?.album, fileName])
+    }
 
     /// Идёт конвертация (для любого iPod).
     var isConverting: Bool {

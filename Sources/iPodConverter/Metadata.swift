@@ -173,7 +173,8 @@ final class MetadataFetcher {
             term = [first.artist, first.title].compactMap { $0 }.joined(separator: " ")
         }
         let songs = await search(term: term)
-        var picks = Self.match(group.map(\.1), in: songs)
+        // Сопоставление — сотни сравнений строк: считаем в фоне, чтобы не подтормаживал интерфейс.
+        var picks = await Self.matchInBackground(group.map(\.1), in: songs)
 
         // Альбом угадан по папке, а нашлось не то (папка оказалась не альбомом: «Загрузки», «meta»…) —
         // ищем каждый трек отдельно по «артист + название».
@@ -186,7 +187,7 @@ final class MetadataFetcher {
                     var single = g
                     single.album = nil
                     let s2 = await search(term: [g.artist, g.title].compactMap { $0 }.joined(separator: " "))
-                    picks[i] = Self.match([single], in: s2).first ?? nil
+                    picks[i] = await Self.matchInBackground([single], in: s2).first ?? nil
                 }
             }
         }
@@ -258,6 +259,14 @@ final class MetadataFetcher {
     }
 
     // MARK: Сопоставление
+
+    private struct SongsBox: @unchecked Sendable { let v: [[String: Any]?] }
+    private struct InBox: @unchecked Sendable { let g: [TagGuess]; let s: [[String: Any]] }
+
+    nonisolated static func matchInBackground(_ guesses: [TagGuess], in songs: [[String: Any]]) async -> [[String: Any]?] {
+        let input = InBox(g: guesses, s: songs)
+        return await Task.detached(priority: .utility) { SongsBox(v: match(input.g, in: input.s)) }.value.v
+    }
 
     /// Для каждого локального трека — лучшая песня из выдачи (или nil, если уверенного совпадения нет).
     /// Сначала выбирается одно издание альбома (то, где совпало больше всего треков), потом треки внутри него.

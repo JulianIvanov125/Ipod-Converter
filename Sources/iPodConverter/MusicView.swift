@@ -29,9 +29,8 @@ struct MusicSection: View {
     /// Группы дублей: сверху файл, который останется, под ним лишние копии.
     @ViewBuilder
     private var duplicateList: some View {
-        let groups = store.duplicateGroups.filter { g in
-            g.all.contains { t in TrackSearch.matches(store.trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent]) }
-        }
+        let q = store.trackSearch.trimmingCharacters(in: .whitespaces)
+        let groups = q.isEmpty ? store.duplicateGroups : store.duplicateGroups.filter { $0.all.contains { $0.matches(q) } }
         ForEach(groups) { g in
             VStack(spacing: 4) {
                 ForEach(g.all) { t in
@@ -60,12 +59,14 @@ struct MusicSection: View {
                 store.openPanel()
             }
         } else {
+            // Список считаем один раз за отрисовку: на тысячах треков каждый пересчёт заметен.
+            let visible = store.visibleTracks
             VStack(spacing: 0) {
-                toolbar
+                toolbar(visible)
                 columnHeader
                 ScrollView {
                     LazyVStack(spacing: 4) {
-                        if store.visibleTracks.isEmpty {
+                        if visible.isEmpty {
                             Text(emptyText)
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
@@ -74,7 +75,7 @@ struct MusicSection: View {
                         if store.musicScope == .duplicates {
                             duplicateList
                         } else {
-                        ForEach(store.visibleTracks) { t in
+                        ForEach(visible) { t in
                             TrackRow(
                                 track: t,
                                 store: store,
@@ -105,11 +106,11 @@ struct MusicSection: View {
         }
     }
 
-    private var toolbar: some View {
+    private func toolbar(_ visible: [TrackItem]) -> some View {
         HStack(spacing: 12) {
             Picker("", selection: $store.musicScope) {
                 Text(L.scopeAll(store.tracks.count)).tag(Store.MusicScope.all)
-                Text(L.scopeSelected(store.tracks.filter(\.isChecked).count)).tag(Store.MusicScope.selected)
+                Text(L.scopeSelected(store.tracks.reduce(0) { $0 + ($1.isChecked ? 1 : 0) })).tag(Store.MusicScope.selected)
                 Text(L.scopeDuplicates(store.duplicateExtras.count)).tag(Store.MusicScope.duplicates)
             }
             .pickerStyle(.segmented)
@@ -118,7 +119,8 @@ struct MusicSection: View {
             .disabled(store.isMusicBusy)
 
             if store.musicScope == .duplicates {
-                let extras = store.visibleTracks.filter { t in store.duplicateExtras.contains { $0.id == t.id } }
+                let extraIDs = Set(store.duplicateExtras.map(\.id))
+                let extras = visible.filter { extraIDs.contains($0.id) }
                 let allOn = !extras.isEmpty && extras.allSatisfy { store.dupSelection.contains($0.id) }
                 Button(allOn ? L.uncheckAll : L.checkAll) { store.setAllDuplicatesSelected(!allOn) }
                     .buttonStyle(.link)
@@ -126,7 +128,7 @@ struct MusicSection: View {
                     .disabled(extras.isEmpty)
                     .help(L.dupSelectAllHelp)
             } else {
-                let allChecked = !store.visibleTracks.isEmpty && store.visibleTracks.allSatisfy(\.isChecked)
+                let allChecked = !visible.isEmpty && visible.allSatisfy(\.isChecked)
                 Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllChecked(!allChecked) }
                     .buttonStyle(.link)
                     .font(.system(size: 12))
@@ -274,14 +276,15 @@ struct MusicSection: View {
                 }
                 .buttonStyle(.bordered)
             } else {
+                let convertible = store.convertibleTracks
                 Button {
                     store.convertTracks()
                 } label: {
-                    Label(store.hasCheckedTracks ? L.convertSelectedN(store.convertibleTracks.count) : L.convertN(store.convertibleTracks.count),
+                    Label(store.hasCheckedTracks ? L.convertSelectedN(convertible.count) : L.convertN(convertible.count),
                           systemImage: "arrow.triangle.2.circlepath")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(store.convertibleTracks.isEmpty)
+                .disabled(convertible.isEmpty)
             }
         }
         .padding(.horizontal, 18)

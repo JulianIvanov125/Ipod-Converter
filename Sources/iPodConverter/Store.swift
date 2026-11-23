@@ -287,14 +287,18 @@ final class Store {
     var visibleTracks: [TrackItem] {
         // «Дубликаты» — группами: оставляемый файл, под ним лишние копии. Сортировка не применяется.
         if musicScope == .duplicates {
-            return duplicateGroups.filter { g in
-                g.all.contains { t in TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent]) }
-            }.flatMap(\.all)
+            let q = trackSearch.trimmingCharacters(in: .whitespaces)
+            let groups = duplicateGroups
+            return (q.isEmpty ? groups : groups.filter { $0.all.contains { $0.matches(q) } }).flatMap(\.all)
         }
-        var list = tracks.filter { t in
-            // «Выбранные» — показываем только отмеченные; «Все» — весь список (отметки остаются).
-            (musicScope == .all || t.isChecked)
-                && TrackSearch.matches(trackSearch, in: [t.displayTitle, t.info?.artist, t.info?.album, t.url.lastPathComponent])
+        let q = trackSearch.trimmingCharacters(in: .whitespaces)
+        var list: [TrackItem]
+        switch (musicScope, q.isEmpty) {
+        case (.all, true): list = tracks
+        // «Выбранные» — показываем только отмеченные; «Все» — весь список (отметки остаются).
+        case (_, true): list = tracks.filter(\.isChecked)
+        case (.all, false): list = tracks.filter { $0.matches(q) }
+        case (_, false): list = tracks.filter { $0.isChecked && $0.matches(q) }
         }
         guard let key = trackSort else { return list }
         let m = model

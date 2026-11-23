@@ -333,6 +333,9 @@ final class ConversionJob: @unchecked Sendable {
         process.terminationHandler = { [weak self] p in
             out.fileHandleForReading.readabilityHandler = nil
             err.fileHandleForReading.readabilityHandler = nil
+            // Закрываем каналы сразу, не дожидаясь, пока освободится объект задачи.
+            try? out.fileHandleForReading.close()
+            try? err.fileHandleForReading.close()
             guard let self else { return }
             lock.lock()
             let tail = String(decoding: errTail, as: UTF8.self)
@@ -386,11 +389,20 @@ enum ProcessRunner {
             box.err = err.fileHandleForReading.readDataToEndOfFile()
             group.leave()
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-            if p.isRunning { box.timedOut = true; p.terminate() }
+        // Таймаут не должен держать процесс и его каналы до срабатывания: отменяем, как только всё закончилось.
+        // (Раньше каждый запуск ещё 2 минуты держал 4 дескриптора — на тысяче треков они кончались:
+        // «Bad file descriptor».)
+        let timer = DispatchWorkItem { [weak p] in
+            if let p, p.isRunning { box.timedOut = true; p.terminate() }
         }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
         return await withCheckedContinuation { cont in
             group.notify(queue: .global()) {
+                timer.cancel()
+                try? out.fileHandleForReading.close()
+                try? err.fileHandleForReading.close()
+                try? out.fileHandleForWriting.close()
+                try? err.fileHandleForWriting.close()
                 cont.resume(returning: Result(status: p.terminationStatus, out: box.out, err: box.err, timedOut: box.timedOut))
             }
         }

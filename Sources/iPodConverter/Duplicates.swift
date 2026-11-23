@@ -33,11 +33,7 @@ enum DuplicateFinder {
         var byName: [String: [TrackItem]] = [:]
         var order: [String] = []
         for t in tracks {
-            guard let info = t.info else { continue }
-            let g = TagGuess.from(url: t.url, info: info)
-            let title = norm(g.title)
-            guard !title.isEmpty else { continue }
-            let key = "\(norm(g.artist))|\(title)"
+            guard let key = t.dupKey else { continue }
             if byName[key] == nil { order.append(key) }
             byName[key, default: []].append(t)
         }
