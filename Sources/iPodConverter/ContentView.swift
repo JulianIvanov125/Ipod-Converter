@@ -134,15 +134,16 @@ struct ContentView: View {
 
             if store.section == .videos && store.model.supportsMax {
                 Picker("", selection: $store.maxQuality) {
-                    Text("\(L.standard) · 320×240").tag(false)
-                    Text("\(L.maximum) · 640×480").tag(true)
+                    Text("\(L.standard) · \(store.model.settings(max: false).w)×\(store.model.settings(max: false).h)").tag(false)
+                    Text("\(L.maximum) · \(store.model.settings(max: true).w)×\(store.model.settings(max: true).h)").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
                 .controlSize(.small)
                 .disabled(store.isBusy)
-                .help(L.maxHelp(String(format: "%.1f", Double(store.model.settings(max: true).maxrateKbps) / 1000)))
+                .help(L.maxHelp("\(store.model.settings(max: true).w)×\(store.model.settings(max: true).h)",
+                                String(format: "%.1f", Double(store.model.settings(max: true).maxrateKbps) / 1000)))
             }
         }
         .padding(.top, 34)
@@ -358,6 +359,27 @@ private struct IPodTab: View {
             Text(title)
                 .font(.system(size: 12, weight: selected ? .semibold : .regular))
                 .lineLimit(1)
+            if let choices = modelChoices {
+                // 5G и 5.5G не различить автоматически — выбор на виду, а не только правым кликом.
+                Menu {
+                    ForEach(Array(choices.enumerated()), id: \.offset) { _, c in
+                        Button { c.2() } label: {
+                            if c.1 { Label(c.0, systemImage: "checkmark") } else { Text(c.0) }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 14, height: 14)
+                        .background(Circle().fill(Theme.tint(0.1)))
+                        .contentShape(Circle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(L.chooseModelHelp)
+            }
             if let st = storage, st.total > 0 {
                 // Объём и заполненность, как в Finder: полоска занятого и общий размер.
                 let used = Double(st.total - st.free) / Double(st.total)
@@ -504,7 +526,7 @@ struct CatalogView: View {
                                 .foregroundStyle(.green)
                         }
                     }
-                    Text("\(m.details) · \(m.settings(max: false).w)×\(m.settings(max: false).h)" + (m.supportsMax ? " \(L.upTo640)" : "") + " · H.264 \(m.settings(max: false).profileName)")
+                    Text("\(m.details) · \(m.settings(max: false).w)×\(m.settings(max: false).h)" + (m.supportsMax ? " \(L.upTo("\(m.settings(max: true).w)×\(m.settings(max: true).h)"))" : "") + " · H.264 \(m.settings(max: false).profileName)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }

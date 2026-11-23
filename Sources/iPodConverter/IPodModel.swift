@@ -60,7 +60,7 @@ enum IPodModel: String, CaseIterable, Identifiable {
     /// У iPod 5G (2005) 640×480 в спецификации нет — только 320×240, Level 1.3.
     var supportsMax: Bool {
         switch self {
-        case .classic55G, .classic6G, .classic65G, .classic7G, .nano3, .nano4, .nano5: true
+        case .classic55G, .classic6G, .classic65G, .classic7G, .nano3, .nano4, .nano5, .nano7: true
         default: false
         }
     }
@@ -76,6 +76,11 @@ enum IPodModel: String, CaseIterable, Identifiable {
     func settings(max: Bool) -> EncodeSettings {
         if max && supportsMax {
             switch self {
+            case .nano7:
+                // nano 7: H.264 до 720×576, Baseline/Main/High Level 3.0 (спецификация Apple, support.apple.com/112039).
+                // При 30 кадр/с Level 3.0 вмещает 720×480 (40 500 макроблоков/с), поэтому рамка 720×480.
+                return EncodeSettings(w: 720, h: 480, profile: "main", level: "3.0",
+                                      videoKbps: 2000, maxrateKbps: 2500, bufsizeKbps: 5000, isMax: true)
             case .classic6G, .classic65G, .classic7G:
                 // iPod classic: H.264 до 2.5 Мбит/с, 640×480, Baseline до Level 3.0 (спецификация Apple).
                 return EncodeSettings(w: 640, h: 480, profile: "baseline", level: "3.0",

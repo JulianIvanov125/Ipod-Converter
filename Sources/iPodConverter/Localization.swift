@@ -73,11 +73,11 @@ enum L {
     static var catalogHelp: String { t("All iPods — star the ones you own", "Все iPod — отметьте свои звёздочкой", "Усі iPod — позначте свої зірочкою", "Усе iPod — адзначце свае зорачкай") }
     static var standard: String { t("Standard", "Стандарт", "Стандарт", "Стандарт") }
     static var maximum: String { t("Maximum", "Максимум", "Максимум", "Максімум") }
-    static func maxHelp(_ mbps: String) -> String {
-        t("Maximum: H.264 640×480 up to \(mbps) Mbps — sharper picture and good for TV out, but a bigger file. If the iPod rejects the file, update its firmware or switch back to Standard.",
-          "Максимум: H.264 640×480 до \(mbps) Мбит/с — картинка резче и годится для вывода на ТВ, но файл больше. Если iPod не примет файл — обновите прошивку или верните «Стандарт».",
-          "Максимум: H.264 640×480 до \(mbps) Мбіт/с — картинка чіткіша й годиться для виводу на ТБ, але файл більший. Якщо iPod не прийме файл — оновіть прошивку або поверніть «Стандарт».",
-          "Максімум: H.264 640×480 да \(mbps) Мбіт/с — карцінка больш выразная і падыходзіць для вываду на ТБ, але файл большы. Калі iPod не прыме файл — абнавіце прашыўку або вярніце «Стандарт».")
+    static func maxHelp(_ size: String, _ mbps: String) -> String {
+        t("Maximum: H.264 up to \(size), up to \(mbps) Mbps — a sharper picture, but a bigger file. If the iPod rejects the file, update its firmware or switch back to Standard.",
+          "Максимум: H.264 до \(size), до \(mbps) Мбит/с — картинка резче, но файл больше. Если iPod не примет файл — обновите прошивку или верните «Стандарт».",
+          "Максимум: H.264 до \(size), до \(mbps) Мбіт/с — картинка чіткіша, але файл більший. Якщо iPod не прийме файл — оновіть прошивку або поверніть «Стандарт».",
+          "Максімум: H.264 да \(size), да \(mbps) Мбіт/с — карцінка больш выразная, але файл большы. Калі iPod не прыме файл — абнавіце прашыўку або вярніце «Стандарт».")
     }
     static var appearance: String { t("Appearance", "Оформление", "Вигляд", "Выгляд") }
     static var glassMode: String { t("Glass (translucency)", "Стекло (полупрозрачность)", "Скло (напівпрозорість)", "Шкло (паўпразрыстасць)") }
@@ -100,7 +100,7 @@ enum L {
     // Список моделей
     static var allIPods: String { t("All iPods with video", "Все iPod с видео", "Усі iPod з відео", "Усе iPod з відэа") }
     static var starredAppear: String { t("Starred models appear as tabs", "Отмеченные звёздочкой появятся во вкладках", "Позначені зірочкою з'являться у вкладках", "Адзначаныя зорачкай з'явяцца ва ўкладках") }
-    static var upTo640: String { t("(up to 640×480)", "(до 640×480)", "(до 640×480)", "(да 640×480)") }
+    static func upTo(_ size: String) -> String { t("(up to \(size))", "(до \(size))", "(до \(size))", "(да \(size))") }
     static var keepOne: String { t("At least one iPod must stay in the tabs", "Хотя бы один iPod должен остаться во вкладках", "Хоча б один iPod має залишитися у вкладках", "Хаця б адзін iPod павінен застацца ва ўкладках") }
 
     // Пустой экран
@@ -292,10 +292,16 @@ enum L {
     static var syncOpenFinder: String { t("Open Finder", "Открыть Finder", "Відкрити Finder", "Адкрыць Finder") }
     static func convertsFor(_ m: String) -> String { t("Converting for \(m)", "Конвертация под \(m)", "Конвертація під \(m)", "Канвертацыя пад \(m)") }
     static var ambiguousHint: String {
-        t("5G and 5.5G can't be told apart automatically — right-click to choose.",
-          "5G и 5.5G не различить автоматически — уточните правым кликом.",
-          "5G і 5.5G не розрізнити автоматично — уточніть правим кліком.",
-          "5G і 5.5G не адрозніць аўтаматычна — удакладніце правым клікам.")
+        t("5G and 5.5G can't be told apart automatically — click ⌄ next to the name to choose.",
+          "5G и 5.5G не различить автоматически — выберите модель кнопкой ⌄ рядом с названием.",
+          "5G і 5.5G не розрізнити автоматично — оберіть модель кнопкою ⌄ поруч із назвою.",
+          "5G і 5.5G не адрозніць аўтаматычна — выберыце мадэль кнопкай ⌄ побач з назвай.")
+    }
+    static var chooseModelHelp: String {
+        t("Which iPod is it: 5G or 5.5G? 5.5G can play video up to 640×480 (Maximum quality).",
+          "Какой это iPod: 5G или 5.5G? 5.5G показывает видео до 640×480 (качество «Максимум»).",
+          "Який це iPod: 5G чи 5.5G? 5.5G показує відео до 640×480 (якість «Максимум»).",
+          "Які гэта iPod: 5G ці 5.5G? 5.5G паказвае відэа да 640×480 (якасць «Максімум»).")
     }
     static func thisIs(_ m: String) -> String { t("This is \(m)", "Это \(m)", "Це \(m)", "Гэта \(m)") }
     static var noIPodTitle: String { t("Choose your iPod", "Выберите iPod", "Виберіть iPod", "Выберыце iPod") }

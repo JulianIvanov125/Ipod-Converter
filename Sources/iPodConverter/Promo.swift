@@ -62,10 +62,11 @@ enum Promo {
         IPodDetector.shared.refreshNow()
         var waited = 0.0
         while !store.hasIPod && waited < 6 { await sleep(0.3); waited += 0.3 }
-        var addedTab: IPodModel?
-        if !store.hasIPod { store.toggleFavorite(.nano7); addedTab = .nano7 }
-        defer { if let m = addedTab { store.toggleFavorite(m) } }
-        print("вкладки iPod: \(store.favoriteModels.map(\.rawValue))")
+        // Вкладки всех подключённых iPod; добавленные на время съёмки убираем в конце (не defer — run кончается exit).
+        var addedTabs: [IPodModel] = []
+        for m in IPodDetector.shared.connected where !store.isFavorite(m) { store.toggleFavorite(m); addedTabs.append(m) }
+        if !store.hasIPod { store.toggleFavorite(.nano7); addedTabs.append(.nano7) }
+        print("вкладки iPod: \(store.favoriteModels.map(\.rawValue)), подключены: \(IPodDetector.shared.devices.map { "\($0.model.rawValue)\($0.ambiguous ? "?" : "")" })")
 
         // Музыка
         store.add([music])
@@ -142,6 +143,7 @@ enum Promo {
         }
         pc.togglePlay()
         restore()
+        for m in addedTabs { store.toggleFavorite(m) }
         UserDefaults.standard.synchronize()
         exit(0)
     }
