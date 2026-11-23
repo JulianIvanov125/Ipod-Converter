@@ -53,6 +53,21 @@ enum SelfTest {
             }
             return true
         }
+        // --selftest-refresh [файл]: отложенное обновление «Музыки» (файл — добавить; без файла — только дождаться).
+        if let i = args.firstIndex(of: "--selftest-refresh") {
+            setvbuf(stdout, nil, _IOLBF, 0)
+            Task { @MainActor in
+                let r = MusicRefresher.shared
+                r.start()
+                print("ждут с прошлого раза: \(r.waiting), «Музыка» открыта: \(MusicRefresher.musicRunning)")
+                if args.count > i + 1 { r.add(URL(fileURLWithPath: args[i + 1]), cover: nil) }
+                let started = Date()
+                while r.waiting > 0 && Date().timeIntervalSince(started) < 45 { try? await Task.sleep(nanoseconds: 500_000_000) }
+                print("через \(Int(Date().timeIntervalSince(started))) с ждут: \(r.waiting)")
+                exit(0)
+            }
+            return true
+        }
         // --selftest-tags <папка с копиями файлов> <обложка.jpg>: пишет теги в файлы, проверяет пометку и дубли.
         if let i = args.firstIndex(of: "--selftest-tags"), args.count > i + 2 {
             let dir = URL(fileURLWithPath: args[i + 1])
