@@ -189,13 +189,32 @@ final class Updater {
         mv "$OLD" "$BAK" && mv "$NEW" "$OLD" || { mv "$BAK" "$OLD" 2>/dev/null; open "$OLD"; exit 1; }
         xattr -dr com.apple.quarantine "$OLD" 2>/dev/null
         open "$OLD"
-        osascript -e "tell application \\"Finder\\" to delete POSIX file \\"$BAK\\"" >/dev/null 2>&1 || rm -rf "$BAK"
         """
+        // Старую копию убирает в Корзину уже новая версия при запуске (cleanupPrevious):
+        // через Finder macOS спрашивала разрешение «управлять Finder», и скрипт висел на этом вопросе.
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", script, "updater", app.path, newApp.path]
         try p.run()
-        NSApp.terminate(nil)
+        // Пока на окне открыт лист (окно обновления), macOS отменяет выход — приложение не закрывалось
+        // и обновление «висело». Закрываем листы, потом выходим; если выход всё равно отменят — exit.
+        Updater.shared.showWindow = false
+        for w in NSApp.windows { if let s = w.attachedSheet { w.endSheet(s) } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(0) }
+    }
+
+    /// После обновления рядом остаётся «… .previous.app» — убираем её в Корзину (не удаляем насовсем).
+    static func cleanupPrevious() {
+        let app = Bundle.main.bundleURL
+        let bak = app.deletingPathExtension().appendingPathExtension("previous").appendingPathExtension("app")
+        guard FileManager.default.fileExists(atPath: bak.path) else { return }
+        do {
+            try FileManager.default.trashItem(at: bak, resultingItemURL: nil)
+            AppLog.info("Previous version moved to Trash")
+        } catch {
+            AppLog.error("Could not move previous version to Trash: \(error.localizedDescription)")
+        }
     }
 
     private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {

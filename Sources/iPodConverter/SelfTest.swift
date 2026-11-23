@@ -80,6 +80,10 @@ enum SelfTest {
                 do {
                     let app = try await Updater.prepare(dmg: URL(fileURLWithPath: args[i + 1]), sha: URL(fileURLWithPath: args[i + 2]), version: args[i + 3]) { _ in }
                     print("подготовлено: \(app.lastPathComponent) — перезапуск")
+                    // Как у пользователя: окно обновления открыто листом — раньше из-за него выход отменялся.
+                    Updater.shared.phase = .installing
+                    Updater.shared.showWindow = true
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
                     try Updater.relaunch(replacingWith: app)
                 } catch {
                     print("ОШИБКА: \(error.localizedDescription)")

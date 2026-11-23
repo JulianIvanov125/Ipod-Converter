@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Stress.runIfRequested() { return }
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         MusicRefresher.shared.start()
+        Updater.cleanupPrevious()
         Updater.shared.checkOnLaunch()
         AppLog.info("Start iPod Converter \(v) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(SupportReport.machine())")
         AppearanceSettings.shared.apply()
