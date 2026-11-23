@@ -36,7 +36,13 @@ open it and drag **iPod Converter** to Applications.
 - Output format: Auto, AAC, MP3 or Apple Lossless — globally or per track; files the iPod already plays are copied
   without re-encoding. The Type column shows the current format → the result for the selected iPod
 - FLAC, ALAC, WAV/AIFF (24-bit, hi-res), APE, WavPack, DSD, Opus, Ogg Vorbis, WMA, MP3, AAC
-- Missing tags and covers are filled from the Apple Music catalog; existing tags are never overwritten
+- Missing tags and covers are filled from the Apple Music catalog and written straight into the original file —
+  no re-encoding, the file is replaced only after a check (same audio, nothing lost, iTunes gapless data kept);
+  existing tags are never overwritten
+- Tag editor: double-click a track to edit title, artist, album, year, genre, track/disc and the cover
+  (drag & drop, file or paste); edit a whole album at once by checking its tracks
+- Duplicates filter: same artist and title, the best copy stays; extra copies go to the Trash one by one or all at once
+- Tracks that are already in your Music library are never copied or added again
 - Star ratings read from files and synced with the Music app
 - Column sorting and search that ignores Latin/Cyrillic and wrong keyboard layout (`kino` = `Кино` = `rbyj`)
 
@@ -57,6 +63,8 @@ open it and drag **iPod Converter** to Applications.
   playlist in Finder
 - Tracks go to your Music library; optionally into a playlist of your own, and a cover maker creates
   Apple Music–style placeholder covers for it
+- Tags and covers written into files are updated in the Music app too (right away, or when Music is opened next);
+  "Covers → Music" fixes albums that Music shows grey although the tracks have covers
 - If something fails, "Copy for support" gives a report with what succeeded, where it failed and the error text
 
 **Look** — Clear Glass design, light/dark theme, English / Russian / Ukrainian / Belarusian.
@@ -91,9 +99,17 @@ Claude Desktop — add to `~/Library/Application Support/Claude/claude_desktop_c
 | `find_duplicates` | Duplicate tracks: which copy to keep, which are extra | No |
 | `convert` | Converts for the iPod and adds to Music/TV (optionally into a playlist) | Creates new files |
 | `fill_tags` | Fills missing tags and covers from Apple Music into the original files (no re-encoding) | Yes |
+| `repair_music_covers` | Sets each track's cover in Music again from its file (fixes grey albums) | Music rewrites the artwork |
 | `trash_duplicates` | Moves extra copies to the Trash (the kept copy is never touched) | Yes |
 
 The server runs without a window and uses the output folder chosen in the app, so open the app once first. Your app settings are not changed.
+
+## Feedback and logs
+
+**Help → Report a Problem…** opens a short form (bug, idea or question). You see everything that will be sent —
+app version, macOS, iPod models, the last error report and recent log lines, with your home folder replaced by `~` —
+and choose how to send it: a prefilled GitHub issue or an email with the log attached. Nothing is sent automatically.
+The log lives in `~/Library/Logs/iPod Converter/` (**Help → Show Log in Finder**).
 
 ## Build from source
 
