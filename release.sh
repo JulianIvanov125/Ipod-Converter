@@ -25,5 +25,7 @@ git commit -q -am "Release $VERSION"
 DMG="build/iPod-Converter-${VERSION}.dmg"
 
 git push -q
-gh release create "v$VERSION" "$DMG" --target main --title "iPod Converter $VERSION" --notes-file "$NOTES"
+# Контрольная сумма для обновления из приложения (оно сверяет скачанный DMG с этим файлом).
+shasum -a 256 "$DMG" | awk '{print $1}' > "$DMG.sha256"
+gh release create "v$VERSION" "$DMG" "$DMG.sha256" --target main --title "iPod Converter $VERSION" --notes-file "$NOTES"
 echo "Опубликовано: v$VERSION"

@@ -72,6 +72,7 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: PlayerController.shared.isFullscreen)
+        .sheet(isPresented: Binding(get: { Updater.shared.showWindow }, set: { Updater.shared.showWindow = $0 })) { UpdateView() }
         .background(WindowBackground())
         .alert(L.permTitle, isPresented: Binding(
             get: { IPodDetector.shared.askPermission },

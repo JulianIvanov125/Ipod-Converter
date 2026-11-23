@@ -40,11 +40,19 @@ final class LanguageSettings {
         didSet { UserDefaults.standard.set(choice.rawValue, forKey: "language") }
     }
 
-    /// Фактический язык (без «system»).
-    var current: AppLanguage { choice == .system ? AppLanguage.fromSystem() : choice }
+    /// Фактический язык (без «system»). Язык системы запоминаем: его спрашивает каждая строка интерфейса,
+    /// а Locale.preferredLanguages на тысячах строк заметно тормозит. Обновляется при смене языка в системе.
+    var current: AppLanguage { choice == .system ? systemLanguage : choice }
+    private var systemLanguage = AppLanguage.fromSystem()
+    @ObservationIgnored private var localeObserver: NSObjectProtocol?
 
     private init() {
         choice = AppLanguage(rawValue: UserDefaults.standard.string(forKey: "language") ?? "") ?? .system
+        localeObserver = NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
+                                                                object: nil, queue: .main) { _ in
+            let lang = AppLanguage.fromSystem()
+            MainActor.assumeIsolated { LanguageSettings.shared.systemLanguage = lang }
+        }
     }
 }
 
@@ -780,4 +788,33 @@ enum L {
         if bad > 0 { s += t(" · errors: \(bad)", " · ошибок: \(bad)", " · помилок: \(bad)", " · памылак: \(bad)") }
         return s
     }
+
+    // Обновление
+    static var updMenu: String { t("Check for Updates…", "Проверить обновления…", "Перевірити оновлення…", "Праверыць абнаўленні…") }
+    static var updChecking: String { t("Checking for updates…", "Проверяю обновления…", "Перевіряю оновлення…", "Правяраю абнаўленні…") }
+    static func updUpToDate(_ v: String) -> String { t("You have the latest version (\(v)).", "У вас последняя версия (\(v)).", "У вас остання версія (\(v)).", "У вас апошняя версія (\(v)).") }
+    static func updAvailable(_ v: String) -> String { t("iPod Converter \(v) is available", "Доступна новая версия: \(v)", "Доступна нова версія: \(v)", "Даступная новая версія: \(v)") }
+    static func updCurrent(_ v: String) -> String { t("You have \(v).", "У вас \(v).", "У вас \(v).", "У вас \(v).") }
+    static var updManualHint: String {
+        t("This update can't be installed automatically here — the download page will open.",
+          "Здесь обновление не поставится само — откроется страница загрузки.",
+          "Тут оновлення не встановиться саме — відкриється сторінка завантаження.",
+          "Тут абнаўленне не ўсталюецца само — адкрыецца старонка загрузкі.")
+    }
+    static var updSkip: String { t("Skip This Version", "Пропустить эту версию", "Пропустити цю версію", "Прапусціць гэтую версію") }
+    static var updLater: String { t("Later", "Позже", "Пізніше", "Пазней") }
+    static var updInstall: String { t("Update and Restart", "Обновить и перезапустить", "Оновити й перезапустити", "Абнавіць і перазапусціць") }
+    static var updOpenPage: String { t("Open Download Page", "Открыть страницу загрузки", "Відкрити сторінку завантаження", "Адкрыць старонку загрузкі") }
+    static var updDownloading: String { t("Downloading the update…", "Скачиваю обновление…", "Завантажую оновлення…", "Спампоўваю абнаўленне…") }
+    static var updInstalling: String { t("Installing — the app will restart…", "Устанавливаю — приложение перезапустится…", "Встановлюю — застосунок перезапуститься…", "Усталёўваю — праграма перазапусціцца…") }
+    static var updAuto: String { t("Check automatically", "Проверять автоматически", "Перевіряти автоматично", "Правяраць аўтаматычна") }
+    static var updCheckFailed: String { t("Couldn't check for updates", "Не удалось проверить обновления", "Не вдалося перевірити оновлення", "Не ўдалося праверыць абнаўленні") }
+    static var updNoChecksum: String { t("The release has no checksum — download it manually", "У релиза нет контрольной суммы — скачайте вручную", "У релізу немає контрольної суми — завантажте вручну", "У рэліза няма кантрольнай сумы — спампуйце ўручную") }
+    static var updDownloadFailed: String { t("Download failed", "Не удалось скачать", "Не вдалося завантажити", "Не ўдалося спампаваць") }
+    static var updChecksumMismatch: String { t("The download is damaged (checksum mismatch) — nothing was installed", "Файл повреждён (контрольная сумма не совпала) — ничего не установлено", "Файл пошкоджено (контрольна сума не збіглася) — нічого не встановлено", "Файл пашкоджаны (кантрольная сума не супала) — нічога не ўсталявана") }
+    static var updMountFailed: String { t("Couldn't open the downloaded DMG", "Не удалось открыть скачанный DMG", "Не вдалося відкрити завантажений DMG", "Не ўдалося адкрыць спампаваны DMG") }
+    static var updBadPackage: String { t("The download doesn't contain the expected app", "В скачанном файле не то приложение", "У завантаженому файлі не той застосунок", "У спампаваным файле не тая праграма") }
+    static var updCopyFailed: String { t("Couldn't copy the new version", "Не удалось скопировать новую версию", "Не вдалося скопіювати нову версію", "Не ўдалося скапіяваць новую версію") }
+    static var close: String { t("Close", "Закрыть", "Закрити", "Закрыць") }
+    static var updNotifyBody: String { t("Click to update — no need to download the DMG again.", "Нажмите, чтобы обновить — скачивать DMG заново не нужно.", "Натисніть, щоб оновити — завантажувати DMG знову не потрібно.", "Націсніце, каб абнавіць — спампоўваць DMG нанова не трэба.") }
 }

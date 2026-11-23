@@ -68,6 +68,26 @@ enum SelfTest {
             }
             return true
         }
+        // --selftest-update <dmg> <sha256> <версия>: обновление этой копии приложения из локального DMG.
+        if let i = args.firstIndex(of: "--selftest-update"), args.count > i + 3 {
+            setvbuf(stdout, nil, _IOLBF, 0)
+            Task { @MainActor in
+                print("сравнение версий: 1.3.10>1.3.9 \(Updater.isNewer("1.3.10", than: "1.3.9")), 1.4>1.3.1 \(Updater.isNewer("1.4", than: "1.3.1")), 1.3.1>1.3.1 \(Updater.isNewer("1.3.1", than: "1.3.1"))")
+                if let r = try? await Updater.fetchLatest() {
+                    print("GitHub: последний \(r.version), dmg \(r.dmg != nil), sha256 \(r.sha256 != nil), новее текущей \(Updater.isNewer(r.version, than: Updater.currentVersion))")
+                }
+                print("можно заменить на месте: \(Updater.canReplaceInPlace) (\(Bundle.main.bundleURL.path))")
+                do {
+                    let app = try await Updater.prepare(dmg: URL(fileURLWithPath: args[i + 1]), sha: URL(fileURLWithPath: args[i + 2]), version: args[i + 3]) { _ in }
+                    print("подготовлено: \(app.lastPathComponent) — перезапуск")
+                    try Updater.relaunch(replacingWith: app)
+                } catch {
+                    print("ОШИБКА: \(error.localizedDescription)")
+                    exit(1)
+                }
+            }
+            return true
+        }
         // --selftest-tags <папка с копиями файлов> <обложка.jpg>: пишет теги в файлы, проверяет пометку и дубли.
         if let i = args.firstIndex(of: "--selftest-tags"), args.count > i + 2 {
             let dir = URL(fileURLWithPath: args[i + 1])
@@ -178,7 +198,8 @@ enum SelfTest {
             let queries = ["kino", "Кино", "rbyj", "tsoy", "coj", "okean elzy", "обійми", "obiimy", "chaif", "jamajka",
                            "ляпис капитал", "lyapis", "motley crue", "мотли", "zemfira", "хочешь", "daft lucky", "дафт", "zzz"]
             for q in queries {
-                let hits = library.filter { TrackSearch.matches(q, in: [$0.0, $0.1]) }.map { "\($0.0) — \($0.1)" }
+                let query = TrackSearch.Query(q)
+                let hits = library.filter { query.matches(TrackSearch.hay([$0.0, $0.1])) }.map { "\($0.0) — \($0.1)" }
                 print("«\(q)» → " + (hits.isEmpty ? "—" : hits.joined(separator: "; ")))
             }
             exit(0)

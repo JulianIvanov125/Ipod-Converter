@@ -88,6 +88,10 @@ enum MusicLibrary {
                         try
                             set media kind of t to music video
                         end try
+                        -- Клипы не должны попадать в перемешивание музыки на iPod.
+                        try
+                            set shufflable of t to false
+                        end try
                     end if
                     if r > -1 then
                         try

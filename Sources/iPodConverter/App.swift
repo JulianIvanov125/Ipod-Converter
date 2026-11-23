@@ -5,8 +5,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested() { return }
         if Promo.runIfRequested() { return }
+        if Stress.runIfRequested() { return }
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         MusicRefresher.shared.start()
+        Updater.shared.checkOnLaunch()
         AppLog.info("Start iPod Converter \(v) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString) · \(SupportReport.machine())")
         AppearanceSettings.shared.apply()
         NSApp.setActivationPolicy(.regular)
@@ -47,6 +49,9 @@ struct IPodConverterApp: App {
                     .keyboardShortcut("o")
             }
             HelpCommands()
+            CommandGroup(after: .appInfo) {
+                Button(L.updMenu) { Task { await Updater.shared.check(userInitiated: true) } }
+            }
         }
 
         Window(L.fbTitle, id: FeedbackCenter.windowID) {

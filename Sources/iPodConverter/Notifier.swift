@@ -15,10 +15,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     static func notify(title: String, body: String, fileURL: URL) {
-        shared.post(title: title, body: body, fileURL: fileURL)
+        shared.post(title: title, body: body, userInfo: ["path": fileURL.path])
     }
 
-    private func post(title: String, body: String, fileURL: URL) {
+    /// «Доступна новая версия»: клик открывает окно обновления.
+    static func notifyUpdate(title: String, body: String) {
+        shared.post(title: title, body: body, userInfo: ["action": "update"])
+    }
+
+    private func post(title: String, body: String, userInfo: [String: String]) {
         guard available else { return fallback(title: title, body: body) }
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
@@ -30,7 +35,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             content.title = title
             content.body = body
             content.sound = .default
-            content.userInfo = ["path": fileURL.path]
+            content.userInfo = userInfo
             let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
             center.add(request) { error in
                 if error != nil { self.fallback(title: title, body: body) }
@@ -60,7 +65,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if let path = response.notification.request.content.userInfo["path"] as? String {
+        if response.notification.request.content.userInfo["action"] as? String == "update" {
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+                MainActor.assumeIsolated { Updater.shared.showWindow = true }
+            }
+        } else if let path = response.notification.request.content.userInfo["path"] as? String {
             DispatchQueue.main.async {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
