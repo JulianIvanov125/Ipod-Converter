@@ -338,8 +338,10 @@ final class TrackItem: Identifiable {
     let id = UUID()
     let url: URL
     var info: AudioInfo? {
-        didSet { dupKeyCache = nil }
+        didSet { dupKeyCache = nil; hayCache = nil; TrackItem.infoVersion &+= 1 }
     }
+    /// Растёт при любом изменении тегов любого трека — для кэшей, зависящих от тегов (дубликаты).
+    @ObservationIgnored nonisolated(unsafe) static var infoVersion = 0
     /// Ключ «артист|название» для поиска дублей — считается один раз (разбор имени файла и папок дорогой).
     @ObservationIgnored private var dupKeyCache: String??
     var dupKey: String? {
@@ -436,10 +438,18 @@ final class TrackItem: Identifiable {
 
     var displayTitle: String { info?.title ?? fileBaseName }
 
-    /// Подходит ли трек под строку поиска.
-    func matches(_ query: String) -> Bool {
-        TrackSearch.matches(query, in: [displayTitle, info?.artist, info?.album, fileName])
+    /// Текст для поиска (транслитерация дорогая — считаем один раз, пока не поменялись теги).
+    @ObservationIgnored private var hayCache: String?
+    var searchHay: String {
+        if let h = hayCache { return h }
+        let h = TrackSearch.hay([displayTitle, info?.artist, info?.album, fileName])
+        hayCache = h
+        return h
     }
+
+    /// Подходит ли трек под строку поиска.
+    func matches(_ query: String) -> Bool { TrackSearch.Query(query).matches(searchHay) }
+    func matches(_ query: TrackSearch.Query) -> Bool { query.matches(searchHay) }
 
     /// Идёт конвертация (для любого iPod).
     var isConverting: Bool {

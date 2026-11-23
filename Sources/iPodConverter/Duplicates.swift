@@ -64,7 +64,20 @@ enum DuplicateFinder {
 }
 
 extension Store {
-    var duplicateGroups: [DuplicateGroup] { DuplicateFinder.groups(tracks, keep: dupKeep) }
+    /// Группы дублей считаются заново, только когда изменился список, теги или выбор «оставить этот»
+    /// (иначе на тысячах треков пересчёт шёл бы на каждую перерисовку окна).
+    var duplicateGroups: [DuplicateGroup] {
+        var h = Hasher()
+        h.combine(tracks.count)
+        for t in tracks { h.combine(ObjectIdentifier(t)) }
+        h.combine(TrackItem.infoVersion)
+        for (k, v) in dupKeep.sorted(by: { $0.key < $1.key }) { h.combine(k); h.combine(v) }
+        let sig = h.finalize()
+        if let c = dupCache, c.sig == sig { return c.groups }
+        let g = DuplicateFinder.groups(tracks, keep: dupKeep)
+        dupCache = (sig, g)
+        return g
+    }
 
     /// Лишние копии (их можно удалять).
     var duplicateExtras: [TrackItem] { duplicateGroups.flatMap(\.extras) }

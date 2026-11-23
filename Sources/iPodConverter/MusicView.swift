@@ -29,10 +29,11 @@ struct MusicSection: View {
     /// Группы дублей: сверху файл, который останется, под ним лишние копии.
     @ViewBuilder
     private var duplicateList: some View {
-        let q = store.trackSearch.trimmingCharacters(in: .whitespaces)
+        let q = TrackSearch.Query(store.trackSearch)
         let groups = q.isEmpty ? store.duplicateGroups : store.duplicateGroups.filter { $0.all.contains { $0.matches(q) } }
+        // Строки идут прямо в LazyVStack (без VStack на группу): группа на тысячи копий
+        // иначе строилась бы целиком и вешала окно.
         ForEach(groups) { g in
-            VStack(spacing: 4) {
                 ForEach(g.all) { t in
                     let keeper = t.id == g.keeper.id
                     TrackRow(
@@ -47,9 +48,8 @@ struct MusicSection: View {
                         duplicate: DuplicateRole(isKeeper: keeper, isSelected: store.dupSelection.contains(t.id),
                                                  onKeep: { store.keepDuplicate(t) })
                     )
+                    .padding(.top, keeper && g.id != groups.first?.id ? 10 : 0)   // отступ между группами
                 }
-            }
-            .padding(.bottom, 8)
         }
     }
 

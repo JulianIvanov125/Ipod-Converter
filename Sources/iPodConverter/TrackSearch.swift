@@ -39,6 +39,26 @@ enum TrackSearch {
         })
     }
 
+    /// Запрос, разобранный один раз на всё поиск по списку (а не на каждый трек).
+    struct Query {
+        let words: [(direct: String, swapped: String?)]
+        init(_ query: String) {
+            words = query.trimmingCharacters(in: .whitespaces).split(separator: " ").map(String.init).map { w in
+                let b = w.count >= 3 ? TrackSearch.fold(TrackSearch.swapLayout(w)) : ""
+                return (TrackSearch.fold(w), b.count >= 3 && b.count >= w.count - 1 ? b : nil)
+            }
+        }
+        var isEmpty: Bool { words.isEmpty }
+        /// hay — уже приведённый fold() текст полей трека.
+        func matches(_ hay: String) -> Bool {
+            words.allSatisfy { w in
+                (!w.direct.isEmpty && hay.contains(w.direct)) || (w.swapped.map { hay.contains($0) } ?? false)
+            }
+        }
+    }
+
+    static func hay(_ fields: [String?]) -> String { fields.compactMap { $0 }.map(fold).joined(separator: " ") }
+
     static func matches(_ query: String, in fields: [String?]) -> Bool {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return true }

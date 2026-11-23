@@ -117,15 +117,23 @@ final class VideoItem: Identifiable {
     func load() async {
         do {
             let info = try await FFmpeg.probe(url)
+            // Разбор имени (регулярки) и запись превью на диск — не на главном потоке:
+            // на тысячах видео это заметно подвешивало окно.
+            let u = url
+            let guess = await Task.detached(priority: .utility) { VideoClassifier.guess(url: u, info: info) }.value
             self.info = info
-            meta = VideoClassifier.guess(url: url, info: info)
+            meta = guess
             base = .ready
             if let jpeg = await FFmpeg.preview(url, info: info) {
-                thumbnail = NSImage(data: jpeg)
-                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("iPodConverter", isDirectory: true)
-                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                let file = dir.appendingPathComponent("\(id.uuidString).jpg")
-                if (try? jpeg.write(to: file)) != nil { coverFile = file }
+                let file = FileManager.default.temporaryDirectory.appendingPathComponent("iPodConverter", isDirectory: true)
+                    .appendingPathComponent("\(id.uuidString).jpg")
+                let (image, saved) = await Task.detached(priority: .utility) { () -> (NSImage?, Bool) in
+                    try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    let img = NSImage(data: jpeg)
+                    return (img, (try? jpeg.write(to: file)) != nil)
+                }.value
+                thumbnail = image
+                if saved { coverFile = file }
             }
         } catch {
             base = .failed(error.localizedDescription)
@@ -272,6 +280,7 @@ final class Store {
     /// Дубликаты: какой файл оставить в группе (выбран вручную) и какие лишние копии отмечены.
     var dupKeep: [String: UUID] = [:]
     var dupSelection: Set<UUID> = []
+    @ObservationIgnored var dupCache: (sig: Int, groups: [DuplicateGroup])?
     /// «Обложки → «Музыка»»: сколько из скольких (nil — не идёт).
     var coverRepairProgress: (done: Int, total: Int)?
 
@@ -312,11 +321,11 @@ final class Store {
     var visibleTracks: [TrackItem] {
         // «Дубликаты» — группами: оставляемый файл, под ним лишние копии. Сортировка не применяется.
         if musicScope == .duplicates {
-            let q = trackSearch.trimmingCharacters(in: .whitespaces)
+            let q = TrackSearch.Query(trackSearch)
             let groups = duplicateGroups
             return (q.isEmpty ? groups : groups.filter { $0.all.contains { $0.matches(q) } }).flatMap(\.all)
         }
-        let q = trackSearch.trimmingCharacters(in: .whitespaces)
+        let q = TrackSearch.Query(trackSearch)
         var list: [TrackItem]
         switch (musicScope, q.isEmpty) {
         case (.all, true): list = tracks
@@ -930,6 +939,7 @@ final class Store {
         musicScope = .all
         dupKeep = [:]
         dupSelection = []
+        dupCache = nil   // иначе кэш держит все треки с обложками в памяти
         musicBatchStatus = nil
     }
 
@@ -1190,7 +1200,8 @@ final class Store {
 
 /// Ограничитель одновременных задач (анализ файлов: ffprobe + превью).
 actor TaskLimiter {
-    static let probes = TaskLimiter(4)
+    /// Разбор файлов (ffprobe + обложка): половина ядер, от 4 до 8.
+    static let probes = TaskLimiter(min(8, max(4, ProcessInfo.processInfo.activeProcessorCount / 2)))
     private var free: Int
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
