@@ -1106,10 +1106,14 @@ final class Store {
     var videoScope: MusicScope = .all
     /// Фильтр по типу: nil — все, иначе только клипы / фильмы / сериалы.
     var videoFilter: VideoCategory?
+    /// «Дубликаты» видео: какую копию группы оставить (вместо лучшей) и какие лишние выбраны.
+    var videoDupKeep: [String: UUID] = [:]
+    var videoDupSelection: Set<UUID> = []
 
     /// Что видно в списке (с учётом фильтра по типу).
     var visibleVideos: [VideoItem] {
-        items.filter { v in
+        if videoScope == .duplicates { return videoDuplicateGroups.flatMap(\.all) }
+        return items.filter { v in
             (videoScope == .all || v.isChecked) && (videoFilter == nil || v.meta?.category == videoFilter)
         }
     }
@@ -1167,11 +1171,14 @@ final class Store {
         items.removeAll()
         videoScope = .all
         videoFilter = nil
+        videoDupKeep = [:]
+        videoDupSelection = []
     }
 
     func remove(_ item: VideoItem) {
         item.cancel()
         items.removeAll { $0.id == item.id }
+        videoDupSelection.remove(item.id)
     }
 
     func openOutputFolder() {

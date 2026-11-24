@@ -87,6 +87,13 @@ enum Promo {
         let outView = NSHostingView(rootView: OutputSettingsView(store: store).background(Color(nsColor: .windowBackgroundColor)))
         outView.frame = NSRect(origin: .zero, size: outView.fittingSize)
         snap(outView, out.appendingPathComponent("2b-output.png"))
+        // Дубликаты видео (если в папке есть)
+        if !store.videoDuplicateGroups.isEmpty {
+            store.videoScope = .duplicates
+            await sleep(1.5)
+            snap(host, out.appendingPathComponent("2c-video-duplicates.png"))
+            store.videoScope = .all
+        }
 
         // Редактор тегов (окно-лист)
         store.section = .music

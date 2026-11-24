@@ -24,8 +24,28 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(spacing: 14) {
                         if store.visibleVideos.isEmpty {
-                            Text(store.videoScope == .selected && store.checkedVideos.isEmpty ? L.nothingChecked : L.searchNothing).font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 30)
+                            Text(store.videoScope == .duplicates ? L.dupNone
+                                 : store.videoScope == .selected && store.checkedVideos.isEmpty ? L.nothingChecked : L.searchNothing)
+                                .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 30)
                         }
+                        if store.videoScope == .duplicates {
+                            // Группы: сверху файл, который останется, под ним лишние копии.
+                            let groups = store.videoDuplicateGroups
+                            ForEach(groups) { g in
+                                ForEach(g.all) { v in
+                                    let keeper = v.id == g.keeper.id
+                                    VideoDuplicateRow(item: v, isKeeper: keeper,
+                                                      isSelected: store.videoDupSelection.contains(v.id),
+                                                      onCheck: { store.setVideoDuplicateSelected(v, $0) },
+                                                      onKeep: { store.keepVideoDuplicate(v) },
+                                                      onTrash: { store.trashVideoDuplicates([v]) },
+                                                      onPreview: { store.playVideo(v, converted: false) })
+                                        .padding(.top, keeper && g.id != groups.first?.id ? 8 : 0)
+                                        // Свой id: иначе SwiftUI переиспользует карточку этого видео из обычного списка.
+                                        .id("dup-\(v.id.uuidString)")
+                                }
+                            }
+                        } else {
                         ForEach(store.visibleVideos) { item in
                             ItemCard(
                                 item: item,
@@ -37,6 +57,7 @@ struct ContentView: View {
                                 onPreview: { store.playVideo(item, converted: $0) },
                                 onCheck: { store.setVideoChecked(item, $0) }
                             )
+                        }
                         }
                     }
                     .padding(.horizontal, 24)
@@ -906,22 +927,44 @@ struct ItemCard: View {
 
 struct VideoToolbar: View {
     @Bindable var store: Store
+    @State private var confirmTrash = false
 
     var body: some View {
         let busy = store.items.contains { $0.isConverting }
         let checked = store.checkedVideos.count
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
+                let extras = store.videoDuplicateExtras
                 Picker("", selection: $store.videoScope) {
-                    Text(L.scopeAllVideos(store.visibleVideos.count)).tag(Store.MusicScope.all)
+                    Text(L.scopeAllVideos(store.videoScope == .duplicates ? store.items.count : store.visibleVideos.count)).tag(Store.MusicScope.all)
                     Text(L.scopeSelected(checked)).tag(Store.MusicScope.selected)
+                    Text(L.scopeDuplicates(extras.count)).tag(Store.MusicScope.duplicates)
                 }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .disabled(busy)
 
-                let allChecked = !store.visibleVideos.isEmpty && store.visibleVideos.allSatisfy(\.isChecked)
-                Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllVideosChecked(!allChecked) }
-                    .buttonStyle(.link).font(.system(size: 12)).disabled(busy)
+                if store.videoScope == .duplicates {
+                    let allOn = !extras.isEmpty && extras.allSatisfy { store.videoDupSelection.contains($0.id) }
+                    Button(allOn ? L.uncheckAll : L.checkAll) { store.setAllVideoDuplicatesSelected(!allOn) }
+                        .buttonStyle(.link).font(.system(size: 12)).disabled(extras.isEmpty)
+                        .help(L.dupSelectAllHelp)
+                    let sel = store.selectedVideoDuplicates
+                    Button(role: .destructive) { confirmTrash = true } label: {
+                        Label(L.dupTrashN(sel.count), systemImage: "trash")
+                    }
+                    .buttonStyle(.borderedProminent).tint(.red).controlSize(.small)
+                    .disabled(sel.isEmpty || busy)
+                    .alert(L.dupTrashConfirmTitle(sel.count), isPresented: $confirmTrash) {
+                        Button(L.dupTrashN(sel.count), role: .destructive) { store.trashVideoDuplicates(sel) }
+                        Button(L.cancel, role: .cancel) {}
+                    } message: {
+                        Text(L.dupTrashConfirmText)
+                    }
+                } else {
+                    let allChecked = !store.visibleVideos.isEmpty && store.visibleVideos.allSatisfy(\.isChecked)
+                    Button(allChecked ? L.uncheckAll : L.checkAll) { store.setAllVideosChecked(!allChecked) }
+                        .buttonStyle(.link).font(.system(size: 12)).disabled(busy)
+                }
 
                 Spacer()
 
@@ -1177,5 +1220,78 @@ struct IPodStorageBadge: View {
             .help(fits ? L.storageHelp(dev.name ?? store.model.title)
                        : L.storageNotEnough(Fmt.bytes(need - free)) + "\n" + L.storageHelp(dev.name ?? store.model.title))
         }
+    }
+}
+
+
+// MARK: - Строка в режиме «Дубликаты» видео
+
+/// Компактная строка дубля: превью, название, где лежит файл, качество и что с ним будет.
+struct VideoDuplicateRow: View {
+    let item: VideoItem
+    let isKeeper: Bool
+    let isSelected: Bool
+    let onCheck: (Bool) -> Void
+    let onKeep: () -> Void
+    let onTrash: () -> Void
+    let onPreview: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if isKeeper {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(.green).frame(width: 18)
+                    .help(L.dupKeeperHelpVideo)
+            } else {
+                Toggle("", isOn: Binding(get: { isSelected }, set: { onCheck($0) }))
+                    .toggleStyle(.checkbox).labelsHidden().frame(width: 18)
+            }
+            Button(action: onPreview) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6).fill(Theme.tint(0.06))
+                    if let t = item.thumbnail {
+                        Image(nsImage: t).resizable().aspectRatio(contentMode: .fill)
+                    }
+                    Image(systemName: "play.fill").font(.system(size: 11)).foregroundStyle(.white).shadow(radius: 2)
+                }
+                .frame(width: 80, height: 45)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(L.previewOriginal)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.displayTitle).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    Text(isKeeper ? L.dupKeeper : L.dupCopy)
+                        .font(.system(size: 9, weight: .bold)).textCase(.uppercase)
+                        .foregroundStyle(isKeeper ? Color.green : Color.orange)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 3).fill((isKeeper ? Color.green : Color.orange).opacity(0.12)))
+                }
+                // У копий одинаковые артист и название — различаются файлом.
+                Text((item.url.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 12)
+            if let i = item.info {
+                Text("\(i.displayWidth)×\(i.displayHeight) · \(i.videoCodec.uppercased())"
+                     + (i.videoBitrate.map { " · " + Fmt.kbps($0 / 1000) } ?? "")
+                     + " · \(Fmt.bytes(i.fileSize)) · \(Fmt.duration(i.duration))")
+                    .font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+            }
+            if isKeeper {
+                Color.clear.frame(width: 150, height: 20)
+            } else {
+                Button(L.dupKeepThis, action: onKeep).buttonStyle(.link).font(.system(size: 11))
+                    .frame(width: 120, alignment: .trailing)
+                Button(action: onTrash) {
+                    Image(systemName: "trash").font(.system(size: 10, weight: .semibold)).foregroundStyle(.red)
+                        .frame(width: 20, height: 20).background(Circle().fill(Color.red.opacity(0.08)))
+                }
+                .buttonStyle(.plain).disabled(item.isConverting).help(L.dupTrashOne)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(isKeeper ? Color.green.opacity(0.05) : Theme.tint(0.03)))
     }
 }

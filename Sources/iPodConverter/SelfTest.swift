@@ -68,6 +68,28 @@ enum SelfTest {
             }
             return true
         }
+        // --selftest-videodups <папка>: какие видео приложение считает дублями и какое оставит.
+        if let i = args.firstIndex(of: "--selftest-videodups"), args.count > i + 1 {
+            setvbuf(stdout, nil, _IOLBF, 0)
+            Task { @MainActor in
+                let dir = URL(fileURLWithPath: args[i + 1])
+                let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                    .filter { ["mp4", "m4v", "mov", "mkv", "webm", "avi"].contains($0.pathExtension.lowercased()) }
+                var items: [VideoItem] = []
+                for f in files { let v = VideoItem(url: f); await v.load(); items.append(v) }
+                let groups = DuplicateFinder.videoGroups(items, keep: [:])
+                print("видео: \(items.count), групп дублей: \(groups.count)")
+                for g in groups {
+                    print("• \(g.key)")
+                    for v in g.all {
+                        let i = v.info!
+                        print("   \(v.id == g.keeper.id ? "ОСТАВИМ" : "копия  ") \(i.displayWidth)×\(i.displayHeight) \(i.videoCodec) — \(v.url.lastPathComponent)")
+                    }
+                }
+                exit(0)
+            }
+            return true
+        }
         // --selftest-update <dmg> <sha256> <версия>: обновление этой копии приложения из локального DMG.
         if let i = args.firstIndex(of: "--selftest-update"), args.count > i + 3 {
             setvbuf(stdout, nil, _IOLBF, 0)
