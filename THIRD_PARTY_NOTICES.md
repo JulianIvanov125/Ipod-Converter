@@ -15,6 +15,20 @@ The exact build configuration is in `build_ffmpeg.sh`; running it reproduces the
 binaries from the sources above (x264, LAME and mpg123 static libraries come from Homebrew;
 dav1d is built from its source tarball, checked against the Homebrew formula's SHA-256).
 
+## Windows version
+
+The Windows zips (`iPod-Converter-<version>-Windows-x64.zip` / `-arm64.zip`) bundle:
+
+| Component | Version | License | Source |
+|---|---|---|---|
+| FFmpeg (`engine\ffmpeg.exe`, `engine\ffprobe.exe`) | n8.1 GPL build by BtbN (`ffmpeg-n8.1-latest-win64-gpl` / `-winarm64-gpl`) | GPL-3.0-or-later | https://github.com/BtbN/FFmpeg-Builds (build scripts and the sources of every included library); FFmpeg: https://ffmpeg.org |
+| Swift runtime and Foundation (linked into `engine\iPodConverter.exe`) | 6.4.3 | Apache-2.0 with Runtime Library Exception | https://github.com/swiftlang |
+| Windows App SDK / WinUI 3 | 2.6.5 | MIT | https://github.com/microsoft/WindowsAppSDK |
+| .NET runtime | 9 | MIT | https://github.com/dotnet/runtime |
+
+`build_windows.ps1` rebuilds the window and the engine from this repository; the FFmpeg binaries are taken unchanged
+from the BtbN release named above.
+
 iPod, iPod classic, iPod nano, iPod touch, Apple Music and iTunes are trademarks of Apple Inc.
 This project is not affiliated with or endorsed by Apple.
 
