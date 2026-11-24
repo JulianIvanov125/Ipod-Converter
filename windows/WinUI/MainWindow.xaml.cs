@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.Media.Core;
+using Windows.Media.Playback;
 
 namespace IPodConverter;
 
@@ -67,7 +69,13 @@ public sealed partial class MainWindow : Window
             ShowInfo(Strings.EngineStopped, err, InfoBarSeverity.Error);
             ConvertButton.IsEnabled = false;
         });
-        Closed += (_, _) => _engine.Dispose();
+        Closed += (_, _) => { StopPlayer(); _engine.Dispose(); };
+        ToolTipService.SetToolTip(PlayerSystemButton, Strings.OpenInSystemPlayer);
+        ToolTipService.SetToolTip(PlayerFullButton, Strings.FullScreen);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PlayerFullButton, Strings.FullScreen);
+        ToolTipService.SetToolTip(PlayerCloseButton, Strings.ClosePlayer);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PlayerSystemButton, Strings.OpenInSystemPlayer);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PlayerCloseButton, Strings.ClosePlayer);
 
         if (!_engine.Start())
         {
@@ -295,6 +303,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowInfo(string title, string message, InfoBarSeverity severity)
     {
+        Info.ActionButton = null;
         Info.Title = title;
         Info.Message = message;
         Info.Severity = severity;
@@ -389,6 +398,120 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) _engine.TrashDuplicates();
+    }
+
+    // MARK: плеер
+
+    private string? _playingPath;
+
+    private void PlayOriginal_Click(object sender, RoutedEventArgs e)
+    {
+        if (_byId.TryGetValue(IdOf(sender), out var vm)) Play(vm, vm.Path, converted: false);
+    }
+
+    private void PlayConverted_Click(object sender, RoutedEventArgs e)
+    {
+        if (_byId.TryGetValue(IdOf(sender), out var vm) && vm.Output.Length > 0) Play(vm, vm.Output, converted: true);
+    }
+
+    private void Play(ItemViewModel vm, string path, bool converted)
+    {
+        try { PlayCore(vm, path, converted); }
+        catch (Exception ex) { Log($"play setup error: {path}: {ex}"); }
+    }
+
+    private void PlayCore(ItemViewModel vm, string path, bool converted)
+    {
+        path = path.Replace('/', '\\');
+        StopPlayer();
+        if (Info.ActionButton != null) Info.IsOpen = false;   // старая ошибка «не могу воспроизвести» к новому файлу не относится
+        _playingPath = path;
+        PlayerTitle.Text = vm.ToString();
+        PlayerWhich.Text = "· " + (converted ? Strings.ConvertedLower : Strings.Original);
+        PlayerKindIcon.Glyph = vm.IsVideo ? "\uE714" : "\uE8D6";
+        PlayerFullButton.Visibility = vm.IsVideo ? Visibility.Visible : Visibility.Collapsed;
+        // Звук — компактно (только панель управления и обложка), видео — с картинкой.
+        Player.Height = vm.IsVideo ? 340 : 150;
+        Player.PosterSource = vm.IsVideo ? null : vm.Cover;
+        // Сначала показать панель: в свёрнутой панели у MediaPlayerElement ещё нет шаблона, и первый запуск терялся.
+        PlayerPanel.Visibility = Visibility.Visible;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_playingPath != path) return;
+            try
+            {
+                var player = new MediaPlayer { AutoPlay = true };
+                player.MediaFailed += (_, args) => DispatcherQueue.TryEnqueue(() =>
+                {
+                    Log($"play failed: {path}: {args.Error} {args.ErrorMessage}");
+                    if (_playingPath != path) return;
+                    StopPlayer();
+                    ShowInfo(Strings.CantPlay(Path.GetFileName(path)), Strings.CantPlayHint + (args.ErrorMessage is { Length: > 0 } m ? $" ({m})" : ""),
+                        InfoBarSeverity.Warning);
+                    Info.ActionButton = SystemPlayerButton(path);
+                });
+                player.Source = MediaSource.CreateFromUri(new Uri(path));
+                Player.SetMediaPlayer(player);
+                player.Play();
+            }
+            catch (Exception ex)
+            {
+                Log($"play error: {path}: {ex}");
+                StopPlayer();
+                ShowInfo(Strings.CantPlay(Path.GetFileName(path)), ex.Message, InfoBarSeverity.Warning);
+                Info.ActionButton = SystemPlayerButton(path);
+            }
+        });
+    }
+
+    private static void Log(string text)
+    {
+        try
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "iPod Converter", "Logs");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, "window.log"), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [INFO] {text}\n");
+        }
+        catch { }
+    }
+
+    private Button SystemPlayerButton(string path)
+    {
+        var b = new Button { Content = Strings.OpenInSystemPlayer };
+        b.Click += (_, _) => OpenInSystemPlayer(path);
+        return b;
+    }
+
+    private static void OpenInSystemPlayer(string path)
+    {
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); } catch { }
+    }
+
+    private void StopPlayer()
+    {
+        var old = Player.MediaPlayer;
+        if (old != null)
+        {
+            Player.SetMediaPlayer(null);
+            // У MediaPlayerElement с самого начала есть свой пустой MediaPlayer — его Pause() бросает E_ABORT,
+            // из-за этого первый запуск после открытия окна молча не срабатывал.
+            try { old.Pause(); } catch (System.Runtime.InteropServices.COMException) { }
+            try { old.Dispose(); } catch (System.Runtime.InteropServices.COMException) { }
+        }
+        PlayerPanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Во весь экран (Esc или двойной щелчок — обратно, это делает сам MediaPlayerElement).</summary>
+    private void PlayerFull_Click(object sender, RoutedEventArgs e) => Player.IsFullWindow = true;
+
+    private void PlayerClose_Click(object sender, RoutedEventArgs e) { StopPlayer(); _playingPath = null; }
+
+    private void PlayerSystem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playingPath == null) return;
+        var path = _playingPath;
+        StopPlayer();
+        OpenInSystemPlayer(path);
     }
 
     // MARK: перетаскивание

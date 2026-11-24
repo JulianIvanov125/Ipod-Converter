@@ -44,6 +44,8 @@ public sealed class ItemViewModel : INotifyPropertyChanged
     public bool IsFailed => State == "failed";
     public bool IsBusy => State is "converting" or "queued";
     public bool CanRemove => !IsBusy;
+    /// <summary>Оригинал можно слушать/смотреть, когда файл прочитан (у битого файла — тоже: вдруг Windows его откроет).</summary>
+    public bool CanPlayOriginal => State != "loading";
     public Visibility KeepVisibility => DupRole == "extra" ? Visibility.Visible : Visibility.Collapsed;
     public Visibility KeeperBadgeVisibility => DupRole == "keep" ? Visibility.Visible : Visibility.Collapsed;
 

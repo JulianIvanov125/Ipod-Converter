@@ -108,7 +108,12 @@
         </Grid>
 
         <!-- Список файлов -->
-        <Grid Grid.Row="3" Margin="12,0,12,8" CornerRadius="8"
+        <Grid Grid.Row="3" Margin="12,0,12,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+        <Grid Margin="0" CornerRadius="8"
               Background="{ThemeResource LayerFillColorDefaultBrush}"
               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
             <ListView x:Name="List" SelectionMode="None" Padding="0,4,0,4">
@@ -168,6 +173,18 @@
                             <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                 <Button Tag="{x:Bind Id}" Click="Keep_Click" Visibility="{x:Bind KeepVisibility, Mode=OneWay}"
                                         Content="{x:Bind local:Strings.KeepThis}" />
+                                <Button Tag="{x:Bind Id}" Click="PlayOriginal_Click" IsEnabled="{x:Bind CanPlayOriginal, Mode=OneWay}"
+                                        Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="{x:Bind local:Strings.PlayOriginal}" AutomationProperties.Name="{x:Bind local:Strings.PlayOriginal}">
+                                    <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                </Button>
+                                <Button Tag="{x:Bind Id}" Click="PlayConverted_Click" Visibility="{x:Bind OpenVisibility, Mode=OneWay}"
+                                        Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="{x:Bind local:Strings.PlayConverted}" AutomationProperties.Name="{x:Bind local:Strings.PlayConverted}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <FontIcon Glyph="&#xE768;" FontSize="14" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        <TextBlock Text="{x:Bind local:Strings.Converted}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                                 <Button Tag="{x:Bind Id}" Click="ShowInFolder_Click" Visibility="{x:Bind OpenVisibility, Mode=OneWay}"
                                         Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="{x:Bind local:Strings.ShowInFolder}">
                                     <FontIcon Glyph="&#xE838;" FontSize="14" />
@@ -189,6 +206,45 @@
                 <TextBlock x:Name="EmptyHint" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"
                            TextAlignment="Center" TextWrapping="Wrap" MaxWidth="460" />
             </StackPanel>
+        </Grid>
+            <!-- Встроенный плеер: оригинал или готовый файл -->
+            <Grid x:Name="PlayerPanel" Grid.Row="1" Visibility="Collapsed" Margin="0,8,0,0" CornerRadius="8" Padding="8"
+                  Background="{ThemeResource LayerFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <FontIcon x:Name="PlayerKindIcon" Glyph="&#xE768;" FontSize="14" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="PlayerTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="PlayerWhich" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <Button x:Name="PlayerFullButton" Grid.Column="1" Click="PlayerFull_Click" Background="Transparent" BorderThickness="0">
+                        <FontIcon Glyph="&#xE740;" FontSize="14" />
+                    </Button>
+                    <Button x:Name="PlayerSystemButton" Grid.Column="2" Click="PlayerSystem_Click" Background="Transparent" BorderThickness="0">
+                        <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+                    </Button>
+                    <Button x:Name="PlayerCloseButton" Grid.Column="3" Click="PlayerClose_Click" Background="Transparent" BorderThickness="0">
+                        <FontIcon Glyph="&#xE711;" FontSize="12" />
+                    </Button>
+                </Grid>
+                <MediaPlayerElement x:Name="Player" Grid.Row="1" Height="320" AreTransportControlsEnabled="True" AutoPlay="True" Stretch="Uniform">
+                    <MediaPlayerElement.TransportControls>
+                        <MediaTransportControls IsZoomButtonVisible="False"
+                                                IsCompact="False" IsVolumeButtonVisible="True" IsVolumeEnabled="True"
+                                                IsSeekBarVisible="True" IsSeekEnabled="True" />
+                    </MediaPlayerElement.TransportControls>
+                </MediaPlayerElement>
+            </Grid>
         </Grid>
 
         <StackPanel Grid.Row="4" Margin="12,0,12,12" Spacing="8">

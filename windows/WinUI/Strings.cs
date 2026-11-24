@@ -82,5 +82,18 @@ public static class Strings
         "Для установки нужно разрешение Windows. Попробуйте ещё раз и нажмите «Да».",
         "Для встановлення потрібен дозвіл Windows. Спробуйте ще раз і натисніть «Так».",
         "Для ўсталёўкі патрэбны дазвол Windows. Паспрабуйце яшчэ раз і націсніце «Так».");
+    public static string PlayOriginal => T("Play original", "Воспроизвести оригинал", "Відтворити оригінал", "Прайграць арыгінал");
+    public static string PlayConverted => T("Play converted file", "Воспроизвести готовый файл", "Відтворити готовий файл", "Прайграць гатовы файл");
+    public static string Converted => T("Converted", "Готовый", "Готовий", "Гатовы");
+    public static string Original => T("original", "оригинал", "оригінал", "арыгінал");
+    public static string ConvertedLower => T("converted", "готовый", "готовий", "гатовы");
+    public static string FullScreen => T("Full screen", "Во весь экран", "На весь екран", "На ўвесь экран");
+    public static string ClosePlayer => T("Close player", "Закрыть плеер", "Закрити плеєр", "Закрыць плэер");
+    public static string OpenInSystemPlayer => T("Open in system player", "Открыть системным плеером", "Відкрити системним плеєром", "Адкрыць сістэмным плэерам");
+    public static string CantPlay(string name) => T($"Windows can't play {name} here", $"Windows не может воспроизвести {name} здесь", $"Windows не може відтворити {name} тут", $"Windows не можа прайграць {name} тут");
+    public static string CantPlayHint => T("The format may need a codec from the Microsoft Store (HEVC, AV1…). Try the system player.",
+        "Для этого формата может понадобиться кодек из Microsoft Store (HEVC, AV1…). Попробуйте системный плеер.",
+        "Для цього формату може знадобитися кодек з Microsoft Store (HEVC, AV1…). Спробуйте системний плеєр.",
+        "Для гэтага фармату можа спатрэбіцца кодэк з Microsoft Store (HEVC, AV1…). Паспрабуйце сістэмны плэер.");
     public static string ChooseFiles => T("Choose music and videos", "Выберите музыку и видео", "Виберіть музику та відео", "Выберыце музыку і відэа");
 }
