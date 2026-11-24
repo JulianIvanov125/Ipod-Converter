@@ -440,6 +440,24 @@ enum L {
             : t("Converted: \(done), errors: \(failed).", "Сконвертировано: \(done), с ошибкой: \(failed).",
                 "Сконвертовано: \(done), з помилкою: \(failed).", "Сканвертавана: \(done), з памылкай: \(failed).")
     }
+    /// «≈ 3 мин», «≈ 1 ч 20 мин», «< 1 мин».
+    static func etaDuration(_ s: Double) -> String {
+        if s < 45 { return t("< 1 min", "< 1 мин", "< 1 хв", "< 1 хв") }
+        let m = Int((s / 60).rounded())
+        if m < 60 { return t("≈ \(m) min", "≈ \(m) мин", "≈ \(m) хв", "≈ \(m) хв") }
+        let h = m / 60, r = m % 60
+        return r == 0 ? t("≈ \(h) h", "≈ \(h) ч", "≈ \(h) год", "≈ \(h) гадз")
+            : t("≈ \(h) h \(r) min", "≈ \(h) ч \(r) мин", "≈ \(h) год \(r) хв", "≈ \(h) гадз \(r) хв")
+    }
+    static func etaLeft(_ s: Double) -> String {
+        t("\(etaDuration(s)) left", "осталось \(etaDuration(s))", "залишилось \(etaDuration(s))", "засталося \(etaDuration(s))")
+    }
+    static var etaHelp: String {
+        t("Approximate time, based on how fast this Mac converted before",
+          "Примерное время — по тому, как быстро этот Mac конвертировал раньше",
+          "Приблизний час — за тим, як швидко цей Mac конвертував раніше",
+          "Прыблізны час — па тым, як хутка гэты Mac канвертаваў раней")
+    }
     static func batchProgress(_ done: Int, _ total: Int) -> String {
         t("\(done) of \(total)", "\(done) из \(total)", "\(done) з \(total)", "\(done) з \(total)")
     }

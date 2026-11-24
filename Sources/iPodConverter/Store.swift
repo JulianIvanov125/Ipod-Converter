@@ -359,6 +359,7 @@ final class Store {
     private(set) var musicRunning = 0
     @ObservationIgnored private var batch = (model: IPodModel.classic5G, outputs: [(URL, TrackItem)](), converted: 0, kept: 0, failed: 0)
     private static let maxParallelTracks = 3
+    @ObservationIgnored private var musicETA = ETATracker()
     private(set) var musicBatchTotal = 0
     @ObservationIgnored private var musicBatchIDs: Set<UUID> = []
     var model: IPodModel {
@@ -717,10 +718,13 @@ final class Store {
         musicBatchStatus = nil
         let folder = musicDestination
         musicBatchIDs = []
-        for t in list where t.plan(for: model) != nil {
+        musicETA = ETATracker()
+        for t in list {
+            guard let plan = t.plan(for: model) else { continue }
             t.setState(.queued, for: model)
             musicQueue.append(t)
             musicBatchIDs.insert(t.id)
+            musicETA.add(t.id, expected: Self.musicExpected(t, plan: plan), kind: .music)
         }
         musicBatchTotal = musicBatchIDs.count
         batchInLibrary = []
@@ -739,11 +743,16 @@ final class Store {
     private func pumpMusic(folder: URL) {
         while musicRunning < Self.maxParallelTracks, !musicQueue.isEmpty {
             let t = musicQueue.removeFirst()
-            guard t.state(for: batch.model) == .queued, let plan = t.plan(for: batch.model) else { musicBatchTotal -= 1; continue }
+            guard t.state(for: batch.model) == .queued, let plan = t.plan(for: batch.model) else {
+                musicBatchTotal -= 1
+                musicETA.drop(t.id)
+                continue
+            }
             musicRunning += 1
             let done: @MainActor (URL?) -> Void = { [weak self] output in
                 guard let self else { return }
                 self.musicRunning -= 1
+                self.musicETA.finish(t.id)
                 if let output {
                     self.batch.outputs.append((output, t))
                     if plan == .compatible { self.batch.kept += 1 } else { self.batch.converted += 1 }
@@ -760,6 +769,7 @@ final class Store {
                 t.setState(.kept, for: batch.model)
                 batch.kept += 1
                 batchInLibrary.append(pid)
+                musicETA.finish(t.id)
                 continue
             } else if plan == .compatible && !t.needsRetag {
                 t.copyAsIs(model: batch.model, into: folder, completion: done)
@@ -768,6 +778,32 @@ final class Store {
             }
         }
         if musicRunning == 0 && musicQueue.isEmpty { finishMusicBatch() }
+    }
+
+    private static func musicExpected(_ t: TrackItem, plan: AudioPlan) -> Double {
+        plan == .compatible && !t.needsRetag
+            ? ConversionETA.copySeconds
+            : ConversionETA.expected(media: t.info?.duration ?? 0, kind: .music)
+    }
+
+    /// Сколько примерно осталось до конца пачки треков.
+    var musicRemaining: Double? {
+        guard isMusicBusy else { return nil }
+        let running = tracks.reduce(0.0) { sum, t in
+            guard musicBatchIDs.contains(t.id), case .converting(let p) = t.state else { return sum }
+            return sum + musicETA.expected(t.id) * p
+        }
+        return musicETA.remaining(running: running)
+    }
+
+    /// Сколько примерно займёт конвертация треков по кнопке внизу (до старта).
+    var musicEstimate: Double? {
+        guard !isMusicBusy else { return nil }
+        let t = convertibleTracks.reduce(0.0) { sum, tr in
+            guard let plan = tr.plan(for: model) else { return sum }
+            return sum + Self.musicExpected(tr, plan: plan)
+        }
+        return t > 0 ? t : nil
     }
 
     /// Общий прогресс пачки треков: готовые + доли идущих.
@@ -801,6 +837,8 @@ final class Store {
         }
         AppLog.info("Music batch for \(b.model.rawValue): \(summary)")
         for f in failures { AppLog.error("Track failed: \(f.file) — \(f.stage): \(f.error)") }
+        if failures.isEmpty { musicETA.learn() }
+        musicETA = ETATracker()
         let inLibrary = batchInLibrary
         let summaryFull = inLibrary.isEmpty ? summary : summary + " · " + L.alreadyInMusic(inLibrary.count)
         if !inLibrary.isEmpty { AppLog.info("Already in Music, not re-added: \(inLibrary.count)") }
@@ -969,6 +1007,7 @@ final class Store {
     private(set) var videoBatch = (total: 0, finished: 0, failed: 0)
     @ObservationIgnored private var videoBatchIDs: Set<UUID> = []
     @ObservationIgnored private var videoBatchModels: Set<IPodModel> = []
+    @ObservationIgnored private var videoETA = ETATracker()
 
     var isVideoBusy: Bool { videoRunning > 0 || videoBatch.total > videoBatch.finished }
 
@@ -977,10 +1016,14 @@ final class Store {
         if !isVideoBusy {
             videoBatch = (0, 0, 0); videoBatchIDs = []; videoBatchModels = []
             videoBatchStatus = nil; videoReport = nil
+            videoETA = ETATracker()
         }
         for item in list where !item.isConverting {
             item.setState(.queued, for: model)
-            videoQueue.append(VideoJob(item: item, model: model, settings: settings(for: item), root: outputFolder, addToMusic: addToMusic))
+            let s = settings(for: item)
+            let kind: ConversionETA.Kind = s.isMax ? .videoMax : .video
+            videoETA.add(item.id, expected: ConversionETA.expected(media: item.info?.duration ?? 0, kind: kind), kind: kind)
+            videoQueue.append(VideoJob(item: item, model: model, settings: s, root: outputFolder, addToMusic: addToMusic))
             videoBatchIDs.insert(item.id)
             videoBatchModels.insert(model)
             videoBatch.total += 1
@@ -995,6 +1038,7 @@ final class Store {
             guard job.item.state(for: job.model) == .queued, items.contains(where: { $0.id == job.item.id }) else {
                 videoBatch.total -= 1
                 videoBatchIDs.remove(job.item.id)
+                videoETA.drop(job.item.id)
                 continue
             }
             videoRunning += 1
@@ -1006,8 +1050,10 @@ final class Store {
                 if case .failed? = st { self.videoBatch.failed += 1 }
                 if st == nil {                          // отменили во время конвертации
                     self.videoBatch.total -= 1
+                    self.videoETA.drop(job.item.id)
                 } else {
                     self.videoBatch.finished += 1
+                    self.videoETA.finish(job.item.id)
                 }
                 self.pumpVideos()
             }
@@ -1034,9 +1080,30 @@ final class Store {
             let title = videoBatchModels.count == 1 ? L.videoReady(videoBatchModels.first!.title) : L.videosReadyTitle
             Notifier.notify(title: title, body: body, fileURL: outputFolder)
         }
+        if failures.isEmpty { videoETA.learn() }
+        videoETA = ETATracker()
         videoBatch = (0, 0, 0)
         videoBatchIDs = []
         videoBatchModels = []
+    }
+
+    /// Сколько примерно осталось до конца пачки видео.
+    var videoRemaining: Double? {
+        guard isVideoBusy else { return nil }
+        let running = items.reduce(0.0) { sum, v in
+            guard videoBatchIDs.contains(v.id), case .converting(let p) = v.state else { return sum }
+            return sum + videoETA.expected(v.id) * p
+        }
+        return videoETA.remaining(running: running)
+    }
+
+    /// Сколько примерно займёт конвертация по кнопке внизу (до старта).
+    var videoEstimate: Double? {
+        guard !isVideoBusy else { return nil }
+        let t = videosToConvert.reduce(0.0) { sum, v in
+            sum + ConversionETA.expected(media: v.info?.duration ?? 0, kind: settings(for: v).isMax ? .videoMax : .video)
+        }
+        return t > 0 ? t : nil
     }
 
     /// Общий прогресс пачки видео: готовые + доли идущих.

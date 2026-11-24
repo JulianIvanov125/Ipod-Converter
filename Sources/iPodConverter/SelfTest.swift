@@ -578,6 +578,78 @@ enum SelfTest {
             }
             return true
         }
+        // --selftest-eta <папка> <файлы…>: прогноз времени до старта и «осталось» по ходу — против факта.
+        // Видео — по 2 параллельно (как в приложении), треки — по 3. Скорость не запоминается.
+        if let i = args.firstIndex(of: "--selftest-eta"), args.count > i + 2 {
+            let root = URL(fileURLWithPath: args[i + 1])
+            let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+            Task { @MainActor in
+                let model = IPodModel.classic55G
+                let audio = files.filter { AudioRules.audioExtensions.contains($0.pathExtension.lowercased()) }
+                let video = files.filter { !audio.contains($0) }
+                func report(_ name: String, _ tracker: inout ETATracker, parallel: Int, jobs: [(UUID, (@escaping @MainActor () -> Void) -> Void, () -> Double)]) async {
+                    let est = tracker.remaining(running: 0) ?? 0
+                    print("\(name): прогноз до старта \(L.etaDuration(est)) (\(Int(est)) c)")
+                    var queue = jobs, running: [UUID: () -> Double] = [:], done = 0
+                    let start = Date()
+                    var nextLog = 5.0
+                    var trk = tracker
+                    func pump() {
+                        while running.count < parallel, !queue.isEmpty {
+                            let j = queue.removeFirst()
+                            running[j.0] = j.2
+                            j.1 { running[j.0] = nil; trk.finish(j.0); done += 1 }
+                        }
+                    }
+                    pump()
+                    while done < jobs.count {
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        pump()
+                        let el = Date().timeIntervalSince(start)
+                        if el >= nextLog {
+                            let r = running.reduce(0.0) { $0 + trk.expected($1.key) * $1.value() }
+                            print(String(format: "   %3.0f c: осталось %@", el, L.etaDuration(trk.remaining(running: r) ?? 0)))
+                            nextLog += 5
+                        }
+                    }
+                    let el = Date().timeIntervalSince(start)
+                    print(String(format: "   факт: %.0f c; прогноз ошибся в %.2f раза", el, el / max(est, 0.1)))
+                    tracker = trk
+                }
+                if !video.isEmpty {
+                    var tr = ETATracker()
+                    var jobs: [(UUID, (@escaping @MainActor () -> Void) -> Void, () -> Double)] = []
+                    for f in video {
+                        let v = VideoItem(url: f)
+                        await v.load()
+                        let st = VideoOutputSettings.shared.apply(to: model.settings(max: false))
+                        tr.add(v.id, expected: ConversionETA.expected(media: v.info?.duration ?? 0, kind: .video), kind: .video)
+                        jobs.append((v.id, { end in
+                            v.onFinish = { end() }
+                            v.convert(model: model, settings: st, videoRoot: root, addToMusic: false)
+                        }, { if case .converting(let p) = v.state { return p }; return 0 }))
+                    }
+                    await report("Видео ×\(video.count)", &tr, parallel: 2, jobs: jobs)
+                }
+                if !audio.isEmpty {
+                    var tr = ETATracker()
+                    var jobs: [(UUID, (@escaping @MainActor () -> Void) -> Void, () -> Double)] = []
+                    for f in audio {
+                        let t = TrackItem(url: f)
+                        await t.load()
+                        t.viewModel = model
+                        tr.add(t.id, expected: ConversionETA.expected(media: t.info?.duration ?? 0, kind: .music), kind: .music)
+                        jobs.append((t.id, { end in
+                            t.convert(plan: .aac(rate: 44100, kbps: 256), model: model, into: root.appendingPathComponent("music")) { _ in end() }
+                        }, { if case .converting(let p) = t.state { return p }; return 0 }))
+                    }
+                    await report("Треки ×\(audio.count)", &tr, parallel: 3, jobs: jobs)
+                }
+                print("скорость сейчас: видео \(Int(ConversionETA.speed(.video)))×, музыка \(Int(ConversionETA.speed(.music)))×")
+                exit(0)
+            }
+            return true
+        }
         if let i = args.firstIndex(of: "--selftest-video"), args.count > i + 2 {
             let root = URL(fileURLWithPath: args[i + 1])
             let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }

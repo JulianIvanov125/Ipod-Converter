@@ -271,6 +271,9 @@ struct MusicSection: View {
             if let p = store.musicBatchProgress {
                 BatchProgress(done: p.done, total: p.total, fraction: p.fraction)
             }
+            if store.musicScope != .duplicates {
+                ETALabel(seconds: store.isMusicBusy ? store.musicRemaining : store.musicEstimate, left: store.isMusicBusy)
+            }
             if store.musicScope == .duplicates {
                 let sel = store.selectedDuplicates
                 Button(role: .destructive) {

@@ -218,6 +218,7 @@ struct ContentView: View {
                 CopyReportButton(text: report)
                 ReportProblemButton(report: report)
             }
+            ETALabel(seconds: store.isVideoBusy ? store.videoRemaining : store.videoEstimate, left: store.isVideoBusy)
             if store.isVideoBusy {
                 Button(role: .destructive) {
                     store.cancelVideos()
@@ -1176,6 +1177,22 @@ struct SpecColumn: View {
 
 
 /// Общий прогресс пачки: «12 из 30» и полоска.
+/// «≈ 3 мин» до старта, «осталось ≈ 2 мин» во время конвертации.
+struct ETALabel: View {
+    let seconds: Double?
+    let left: Bool
+
+    var body: some View {
+        if let seconds {
+            Text(left ? L.etaLeft(seconds) : L.etaDuration(seconds))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .help(L.etaHelp)
+        }
+    }
+}
+
 struct BatchProgress: View {
     let done: Int
     let total: Int
