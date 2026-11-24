@@ -14,3 +14,7 @@ DerivedData/
 
 # Встраиваемый ffmpeg (собирается build_ffmpeg.sh)
 vendor/
+
+# build — ссылка на build.noindex: Spotlight не индексирует сборку (иначе в поиске две «iPod Converter»)
+build
+build.noindex/
