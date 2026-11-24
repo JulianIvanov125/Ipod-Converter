@@ -1,4 +1,4 @@
-#if os(Linux)
+#if !os(macOS)
 import Foundation
 
 /// Состояние файла в списке Linux-версии.
@@ -187,6 +187,10 @@ final class LinuxEngine {
 
     /// Корзина по спецификации freedesktop: gio trash (есть в GNOME/KDE), иначе ~/.local/share/Trash вручную.
     nonisolated static func trash(_ url: URL) throws {
+        #if os(Windows)
+        try WindowsShell.recycle(url)
+        return
+        #else
         if let gio = ["/usr/bin/gio", "/bin/gio"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: gio)
@@ -211,6 +215,7 @@ final class LinuxEngine {
         let info = "[Trash Info]\nPath=\(path)\nDeletionDate=\(f.string(from: Date()))\n"
         try info.write(to: infoDir.appendingPathComponent(name + ".trashinfo"), atomically: true, encoding: .utf8)
         try fm.moveItem(at: url, to: files.appendingPathComponent(name))
+        #endif
     }
 
     // MARK: Конвертация

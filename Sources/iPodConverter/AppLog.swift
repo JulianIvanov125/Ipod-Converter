@@ -8,6 +8,11 @@ enum AppLog {
         #if os(macOS)
         return FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/iPod Converter", isDirectory: true)
+        #elseif os(Windows)
+        // Windows: %LOCALAPPDATA%\iPod Converter\Logs
+        let base = ProcessInfo.processInfo.environment["LOCALAPPDATA"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("AppData/Local", isDirectory: true)
+        return base.appendingPathComponent("iPod Converter/Logs", isDirectory: true)
         #else
         // Linux: ~/.local/state/ipod-converter (XDG_STATE_HOME). ~/Library там нет.
         let env = ProcessInfo.processInfo.environment["XDG_STATE_HOME"]

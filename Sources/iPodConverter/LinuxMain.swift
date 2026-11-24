@@ -1,4 +1,4 @@
-#if os(Linux)
+#if !os(macOS)
 import Foundation
 
 /// Точка входа Linux-версии. Без аргументов — окно (GTK); с командой — консольный режим:
@@ -12,7 +12,11 @@ enum LinuxMain {
         let args = Array(CommandLine.arguments.dropFirst())
         // Без команды или с путями к файлам («Открыть с помощью») — окно.
         guard let cmd = args.first, ["convert", "dups", "models"].contains(cmd) else {
+            #if os(Windows)
+            WindowsApp.run(files: args.map { URL(fileURLWithPath: $0) })
+            #else
             LinuxApp.run(files: args.map { URL(fileURLWithPath: $0) })
+            #endif
             return
         }
         Task { @MainActor in

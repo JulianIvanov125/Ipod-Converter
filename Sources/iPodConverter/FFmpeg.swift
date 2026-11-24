@@ -40,6 +40,16 @@ enum FFmpegError: LocalizedError {
 
 enum FFmpeg {
     static func tool(_ name: String) -> String? {
+        #if os(Windows)
+        // Windows: ffmpeg.exe рядом с программой (так его кладёт установщик), иначе — из PATH.
+        let exe = name + ".exe"
+        let here = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+        var paths = [here.appendingPathComponent(exe).path, here.appendingPathComponent("ffmpeg/\(exe)").path]
+        for dir in (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ";") {
+            paths.append(URL(fileURLWithPath: String(dir)).appendingPathComponent(exe).path)
+        }
+        return paths.first { FileManager.default.fileExists(atPath: $0) }
+        #else
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent(name).path,
             "/opt/homebrew/bin/\(name)",
@@ -47,6 +57,7 @@ enum FFmpeg {
             "/usr/bin/\(name)",
         ].compactMap { $0 }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        #endif
     }
 
     /// Запускает процесс и возвращает stdout. Больше 2 минут — останавливаем (файл не «висит» вечно).
