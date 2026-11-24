@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import CryptoKit
 import Observation
@@ -295,3 +296,4 @@ struct UpdateView: View {
         .frame(width: 460)
     }
 }
+#endif

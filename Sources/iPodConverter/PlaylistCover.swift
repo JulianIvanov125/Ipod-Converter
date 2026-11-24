@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -238,3 +239,4 @@ struct PlaylistCoverButton: View {
         .popover(isPresented: $open, arrowEdge: .top) { PlaylistCoverMaker(store: store) }
     }
 }
+#endif

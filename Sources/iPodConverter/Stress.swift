@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -126,3 +127,4 @@ enum Stress {
         exit(0)
     }
 }
+#endif

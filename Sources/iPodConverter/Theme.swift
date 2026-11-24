@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Observation
 import SwiftUI
@@ -132,3 +133,4 @@ struct AppearanceMenu: View {
         .help(L.appearance + ": " + settings.choice.title)
     }
 }
+#endif

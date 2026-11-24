@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// MCP-сервер (Model Context Protocol): `iPodConverter --mcp`.
@@ -389,3 +390,4 @@ enum MCPServer {
         return lines.joined(separator: "\n")
     }
 }
+#endif

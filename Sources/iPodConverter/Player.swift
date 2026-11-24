@@ -1,3 +1,4 @@
+#if os(macOS)
 import AVFoundation
 import AVKit
 import AppKit
@@ -908,3 +909,4 @@ struct FullPlayerView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
     }
 }
+#endif

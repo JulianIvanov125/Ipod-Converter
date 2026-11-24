@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 
 /// Текст для поддержки: версия приложения и macOS, iPod, что прошло и где упало, с текстом ошибки.
@@ -80,3 +81,4 @@ extension SupportReport {
         text(model: model, kind: kind, succeeded: [], total: 1, failures: [.init(file: file.lastPathComponent, stage: stage, error: error)])
     }
 }
+#endif

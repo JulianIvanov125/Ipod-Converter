@@ -1,3 +1,4 @@
+#if os(macOS)
 import Observation
 import SwiftUI
 
@@ -264,3 +265,4 @@ struct OutputSettingsView: View {
         }
     }
 }
+#endif

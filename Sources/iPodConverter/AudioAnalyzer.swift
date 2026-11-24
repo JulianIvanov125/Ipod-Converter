@@ -1,3 +1,4 @@
+#if os(macOS)
 import Accelerate
 import AVFoundation
 import MediaToolbox
@@ -162,3 +163,4 @@ final class AudioAnalyzer: @unchecked Sendable {
         os_unfair_lock_unlock(&lock)
     }
 }
+#endif

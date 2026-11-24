@@ -1,3 +1,4 @@
+#if os(macOS)
 import MediaPlayer
 import AVFoundation
 import AppKit
@@ -617,3 +618,4 @@ enum SelfTest {
         return true
     }
 }
+#endif

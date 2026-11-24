@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MediaPlayer
 
@@ -74,3 +75,4 @@ enum NowPlaying {
         rc.previousTrackCommand.isEnabled = true
     }
 }
+#endif

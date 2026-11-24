@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Настройки выхода для одного видео (⚙︎ в карточке «После»)
@@ -160,3 +161,4 @@ struct TrackFormatView: View {
         .frame(width: 400)
     }
 }
+#endif

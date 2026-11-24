@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 private let ink = Theme.ink
@@ -830,3 +831,4 @@ struct DuplicateRole {
     let isSelected: Bool
     let onKeep: () -> Void
 }
+#endif

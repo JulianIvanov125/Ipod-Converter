@@ -544,6 +544,7 @@ enum L {
     // Режимы плеера
     static var shuffleOff: String { t("Shuffle: off", "Случайный порядок: выключен", "Випадковий порядок: вимкнено", "Выпадковы парадак: выключаны") }
     static var shuffleOn: String { t("Shuffle: on", "Случайный порядок: включён", "Випадковий порядок: увімкнено", "Выпадковы парадак: уключаны") }
+#if os(macOS)
     static func repeatHelp(_ m: RepeatMode) -> String {
         switch m {
         case .off: t("Repeat: off — stops at the end of the list", "Повтор: выключен — в конце списка остановится", "Повтор: вимкнено — у кінці списку зупиниться", "Паўтор: выключаны — у канцы спіса спыніцца")
@@ -551,6 +552,7 @@ enum L {
         case .one: t("Repeat: this track", "Повтор: один трек", "Повтор: один трек", "Паўтор: адзін трэк")
         }
     }
+#endif
     static var showLyricsNow: String { t("Show lyrics", "Показать текст песни", "Показати текст пісні", "Паказаць тэкст песні") }
 
     // Текст песни

@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -61,3 +62,4 @@ struct IPodConverterApp: App {
         .windowResizability(.contentSize)
     }
 }
+#endif

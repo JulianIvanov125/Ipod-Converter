@@ -1,3 +1,4 @@
+#if os(macOS)
 import UniformTypeIdentifiers
 import AppKit
 import Foundation
@@ -1224,3 +1225,4 @@ actor TaskLimiter {
         if waiters.isEmpty { free += 1 } else { waiters.removeFirst().resume() }
     }
 }
+#endif

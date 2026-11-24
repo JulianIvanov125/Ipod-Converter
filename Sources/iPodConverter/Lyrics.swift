@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Observation
 import SwiftUI
@@ -357,3 +358,4 @@ private struct LyricLineView: View {
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: isActive)
     }
 }
+#endif

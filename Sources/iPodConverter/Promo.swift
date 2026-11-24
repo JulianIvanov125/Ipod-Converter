@@ -1,3 +1,4 @@
+#if os(macOS)
 import AVFoundation
 import AppKit
 import SwiftUI
@@ -159,3 +160,4 @@ enum Promo {
         exit(0)
     }
 }
+#endif

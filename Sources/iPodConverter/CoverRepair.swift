@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// «Обложки → «Музыка»»: каждому треку ставим в «Музыке» его же обложку из файла.
@@ -54,3 +55,4 @@ enum CoverRepair {
         return res
     }
 }
+#endif

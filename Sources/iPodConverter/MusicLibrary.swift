@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Добавляет готовый файл в Music.app в плейлист конкретного iPod.
@@ -360,3 +361,4 @@ enum MusicLibrary {
         return stdout
     }
 }
+#endif

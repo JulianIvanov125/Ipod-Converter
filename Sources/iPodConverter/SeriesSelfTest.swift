@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// iPodConverter --selftest-series: прогон разборщика по набору имён.
@@ -43,3 +44,4 @@ enum SeriesSelfTest {
         }
     }
 }
+#endif

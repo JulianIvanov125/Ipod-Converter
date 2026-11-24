@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 private let ink = Theme.ink
@@ -1295,3 +1296,4 @@ struct VideoDuplicateRow: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(isKeeper ? Color.green.opacity(0.05) : Theme.tint(0.03)))
     }
 }
+#endif

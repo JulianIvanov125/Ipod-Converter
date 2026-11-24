@@ -1,14 +1,4 @@
-import AppKit
 import Foundation
-
-/// Группа одинаковых треков: один остаётся (лучшее качество или выбранный вручную), остальные — лишние копии.
-struct DuplicateGroup: Identifiable {
-    let key: String
-    let keeper: TrackItem
-    let extras: [TrackItem]
-    var id: String { key }
-    var all: [TrackItem] { [keeper] + extras }
-}
 
 enum DuplicateFinder {
     /// Сравниваем без регистра, диакритики и знаков препинания. Скобки не выкидываем:
@@ -20,6 +10,19 @@ enum DuplicateFinder {
             .trimmingCharacters(in: .whitespaces)
     }
 
+}
+
+#if os(macOS)
+/// Группа одинаковых треков: один остаётся (лучшее качество или выбранный вручную), остальные — лишние копии.
+struct DuplicateGroup: Identifiable {
+    let key: String
+    let keeper: TrackItem
+    let extras: [TrackItem]
+    var id: String { key }
+    var all: [TrackItem] { [keeper] + extras }
+}
+
+extension DuplicateFinder {
     /// Чем лучше копия, тем больше: без потерь, выше битрейт, есть обложка, больше тегов, есть оценка.
     @MainActor static func quality(_ t: TrackItem) -> (Int, Int, Int, Int, Int) {
         let i = t.info
@@ -130,15 +133,26 @@ extension Store {
     }
 }
 
+#endif
+
 // MARK: - Дубли видео
 
 /// Группа одинаковых видео: одно остаётся (лучшее качество или выбранное вручную), остальные — лишние копии.
-struct VideoDuplicateGroup: Identifiable {
+/// Видео для поиска дублей: и карточка Mac-приложения, и элемент списка в Linux-версии.
+@MainActor
+protocol VideoDupItem: AnyObject {
+    var id: UUID { get }
+    var url: URL { get }
+    var meta: VideoMeta? { get }
+    var info: MediaInfo? { get }
+}
+
+struct VideoDuplicateGroup<V: VideoDupItem>: Identifiable {
     let key: String
-    let keeper: VideoItem
-    let extras: [VideoItem]
+    let keeper: V
+    let extras: [V]
     var id: String { key }
-    var all: [VideoItem] { [keeper] + extras }
+    var all: [V] { [keeper] + extras }
 }
 
 extension DuplicateFinder {
@@ -158,7 +172,7 @@ extension DuplicateFinder {
     /// Ключ видео: клип — артист и название, фильм — название и год, серия — сериал, сезон и номер.
     /// Для какого iPod сделан файл: «[iPod nano 7]» в имени или альбом «iPod …» (так подписывает приложение).
     /// Версии одного видео для разных iPod нужны обе — это не дубли.
-    @MainActor static func videoTarget(_ v: VideoItem) -> String {
+    @MainActor static func videoTarget(_ v: some VideoDupItem) -> String {
         let name = v.url.deletingPathExtension().lastPathComponent
         if let r = name.range(of: #"\[(iPod[^\]]*)\]"#, options: .regularExpression) {
             return norm(String(name[r]))
@@ -167,7 +181,7 @@ extension DuplicateFinder {
         return album.lowercased().hasPrefix("ipod ") ? norm(album) : ""
     }
 
-    @MainActor static func videoKey(_ v: VideoItem) -> String? {
+    @MainActor static func videoKey(_ v: some VideoDupItem) -> String? {
         guard let m = v.meta, v.info != nil else { return nil }
         let target = videoTarget(v)
         return baseVideoKey(m).map { target.isEmpty ? $0 : "\($0)|\(target)" }
@@ -190,7 +204,7 @@ extension DuplicateFinder {
     }
 
     /// Чем лучше копия, тем больше: больше картинка, современнее кодек, выше битрейт, больше файл.
-    @MainActor static func videoQuality(_ v: VideoItem) -> (Int, Int, Int, Int64) {
+    @MainActor static func videoQuality(_ v: some VideoDupItem) -> (Int, Int, Int, Int64) {
         guard let i = v.info else { return (0, 0, 0, 0) }
         let codec: Int
         switch i.videoCodec.lowercased() {
@@ -203,19 +217,19 @@ extension DuplicateFinder {
 
     /// Группы дублей видео: тот же ключ и длительность отличается не больше чем на 2 с.
     @MainActor
-    static func videoGroups(_ items: [VideoItem], keep: [String: UUID]) -> [VideoDuplicateGroup] {
-        var byKey: [String: [VideoItem]] = [:]
+    static func videoGroups<V: VideoDupItem>(_ items: [V], keep: [String: UUID]) -> [VideoDuplicateGroup<V>] {
+        var byKey: [String: [V]] = [:]
         var order: [String] = []
         for v in items {
             guard let key = videoKey(v) else { continue }
             if byKey[key] == nil { order.append(key) }
             byKey[key, default: []].append(v)
         }
-        var out: [VideoDuplicateGroup] = []
+        var out: [VideoDuplicateGroup<V>] = []
         for key in order {
             guard let list = byKey[key], list.count > 1 else { continue }
             let sorted = list.sorted { ($0.info?.duration ?? 0) < ($1.info?.duration ?? 0) }
-            var clusters: [[VideoItem]] = []
+            var clusters: [[V]] = []
             for v in sorted {
                 if let last = clusters.last?.last, abs((last.info?.duration ?? 0) - (v.info?.duration ?? 0)) <= 2 {
                     clusters[clusters.count - 1].append(v)
@@ -229,16 +243,19 @@ extension DuplicateFinder {
                 let keeper = chosen ?? c.max { videoQuality($0) < videoQuality($1) }!
                 let extras = c.filter { $0.id != keeper.id }
                     .sorted { $0.url.path.localizedStandardCompare($1.url.path) == .orderedAscending }
-                out.append(VideoDuplicateGroup(key: gkey, keeper: keeper, extras: extras))
+                out.append(VideoDuplicateGroup<V>(key: gkey, keeper: keeper, extras: extras))
             }
         }
         return out
     }
 }
 
+#if os(macOS)
+extension VideoItem: VideoDupItem {}
+
 extension Store {
     /// Группы дублей видео (с учётом фильтра по типу).
-    var videoDuplicateGroups: [VideoDuplicateGroup] {
+    var videoDuplicateGroups: [VideoDuplicateGroup<VideoItem>] {
         let list = videoFilter.map { f in items.filter { $0.meta?.category == f } } ?? items
         return DuplicateFinder.videoGroups(list, keep: videoDupKeep)
     }
@@ -289,3 +306,4 @@ extension Store {
         if videoDuplicateGroups.isEmpty && videoScope == .duplicates { videoScope = .all }
     }
 }
+#endif

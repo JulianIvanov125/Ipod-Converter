@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Observation
 import SwiftUI
@@ -218,3 +219,4 @@ struct HelpCommands: Commands {
         }
     }
 }
+#endif

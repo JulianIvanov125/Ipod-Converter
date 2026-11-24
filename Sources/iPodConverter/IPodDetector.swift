@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import IOKit
 import IOKit.usb
@@ -389,3 +390,4 @@ final class VolumeInfoCache: @unchecked Sendable {
         items[root] = (signature, info)
     }
 }
+#endif

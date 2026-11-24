@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -163,3 +164,4 @@ extension Color {
         return SIMD3(Float(c.redComponent), Float(c.greenComponent), Float(c.blueComponent))
     }
 }
+#endif

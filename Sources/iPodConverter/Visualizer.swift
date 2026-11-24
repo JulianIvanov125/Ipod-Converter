@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Observation
 import SwiftUI
@@ -615,3 +616,4 @@ struct VisualizerStylePicker: View {
         .foregroundStyle(.white)
     }
 }
+#endif

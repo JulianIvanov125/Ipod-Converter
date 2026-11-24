@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import UserNotifications
 
@@ -78,3 +79,4 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 }
+#endif
