@@ -19,7 +19,7 @@
     <SelfContained>true</SelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.4.7</Version>
+    <Version>1.5</Version>
     <Product>iPod Converter</Product>
     <Copyright>GPL-3.0</Copyright>
   </PropertyGroup>
