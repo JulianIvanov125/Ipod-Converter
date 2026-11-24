@@ -1148,27 +1148,6 @@ struct SpecColumn: View {
     }
 }
 
-enum Fmt {
-    static func bytes(_ b: Int64) -> String {
-        let f = ByteCountFormatter()
-        f.countStyle = .file
-        return f.string(fromByteCount: b)
-    }
-
-    static func duration(_ s: Double) -> String {
-        let t = Int(s.rounded())
-        let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
-    }
-
-    static func kbps(_ k: Int) -> String {
-        k >= 1000 ? String(format: "%.1f ", Double(k) / 1000) + L.mbps : "\(k) \(L.kbps)"
-    }
-
-    static func fps(_ f: Double) -> String {
-        abs(f - f.rounded()) < 0.01 ? "\(Int(f.rounded())) fps" : String(format: "%.2f fps", f)
-    }
-}
 
 /// Общий прогресс пачки: «12 из 30» и полоска.
 struct BatchProgress: View {

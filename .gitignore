@@ -18,3 +18,5 @@ vendor/
 # build — ссылка на build.noindex: Spotlight не индексирует сборку (иначе в поиске две «iPod Converter»)
 build
 build.noindex/
+build-linux/
+.build-linux/

@@ -10,8 +10,9 @@ enum LinuxMain {
     static func main() {
         setvbuf(stdout, nil, _IOLBF, 0)
         let args = Array(CommandLine.arguments.dropFirst())
-        guard let cmd = args.first else {
-            LinuxApp.run()
+        // Без команды или с путями к файлам («Открыть с помощью») — окно.
+        guard let cmd = args.first, ["convert", "dups", "models"].contains(cmd) else {
+            LinuxApp.run(files: args.map { URL(fileURLWithPath: $0) })
             return
         }
         Task { @MainActor in
@@ -94,10 +95,4 @@ enum LinuxMain {
     }
 }
 
-/// Окно GTK — следующий шаг; пока подсказка.
-enum LinuxApp {
-    static func run() {
-        print("iPod Converter for Linux. Window coming soon. Commands: convert, dups, models")
-    }
-}
 #endif
