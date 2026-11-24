@@ -18,6 +18,8 @@ git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && { echo "Тег v$V
 
 # Версия: CFBundleShortVersionString = 1.1, CFBundleVersion = число коммитов (растёт само)
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Info.plist
+# Linux/Windows: там Info.plist нет — номер версии вшит в код.
+sed -i '' -E "s/static let embedded = \"[^\"]*\"/static let embedded = \"$VERSION\"/" Sources/iPodConverter/AppVersion.swift
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(( $(git rev-list --count HEAD) + 1 ))" Info.plist
 git commit -q -am "Release $VERSION"
 

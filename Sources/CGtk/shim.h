@@ -221,6 +221,12 @@ static inline void cg_on_drop_files(GtkWidget *w, cg_paths_cb fn, void *data) {
     gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(t));
 }
 
+// --- Плашка вверху окна (AdwBanner): «Доступна версия …» с кнопкой ---
+static inline GtkWidget *cg_banner(const char *title) { return adw_banner_new(title); }
+static inline void cg_banner_title(GtkWidget *b, const char *t) { adw_banner_set_title(ADW_BANNER(b), t); }
+static inline void cg_banner_button(GtkWidget *b, const char *t) { adw_banner_set_button_label(ADW_BANNER(b), t); }
+static inline void cg_banner_reveal(GtkWidget *b, gboolean r) { adw_banner_set_revealed(ADW_BANNER(b), r); }
+
 // --- Уведомление внизу окна ---
 static inline GtkWidget *cg_toast_overlay(GtkWidget *child) {
     GtkWidget *o = adw_toast_overlay_new();

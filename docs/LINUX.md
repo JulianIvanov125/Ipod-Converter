@@ -49,6 +49,23 @@ It installs to `~/.local` and adds **iPod Converter** to the app menu. To remove
 `~/.local/bin/ipod-converter`, `~/.local/share/applications/io.github.ipodconverter.linux.desktop`
 and `~/.local/share/icons/hicolor/*/apps/io.github.ipodconverter.linux.png`.
 
+## Updates
+
+iPod Converter checks GitHub for a new version once a day (and when you press the update button in the header).
+When one is out, a bar appears at the top of the window:
+
+- **Installed from `.tar.gz`** (in `~/.local`): **Update and restart** downloads the new version, checks its SHA-256
+  against GitHub, replaces itself and restarts.
+- **Installed from `.deb`**: **Download and install** downloads the new `.deb` to `~/Downloads`, checks it and opens
+  it in your software installer (it asks for your password). If nothing opens, run
+  `sudo apt install ~/Downloads/ipod-converter_<version>_<arch>.deb`.
+- Built from source: the bar opens the download page.
+
+From the terminal: `ipod-converter update` (check) or `ipod-converter update --install`.
+
+**Two copies?** If you once installed the `.tar.gz` and later the `.deb`, the copy in `~/.local/bin` is found first.
+Check with `which -a ipod-converter` and remove the one you don't use.
+
 ## Use
 
 1. Drop music or videos into the window, or press **Add files** (the folder button adds whole folders).

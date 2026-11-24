@@ -84,6 +84,8 @@ final class LinuxWindow {
     private var status: Widget!
     private var convertButton: Widget!
     private var clearButton: Widget!
+    private var banner: Widget!
+    private var updating = false
     private var scope: Scope = .all
 
     /// Строки списка: чтобы прогресс обновлять без перестройки.
@@ -125,7 +127,17 @@ final class LinuxWindow {
         cg_css_class(clearButton, "flat")
         on(clearButton, "clicked") { [unowned self] in self.engine.clear() }
         cg_header_end(header, clearButton)
+        let updButton = cg_icon_button("software-update-available-symbolic")!
+        cg_css_class(updButton, "flat")
+        cg_tooltip(updButton, L.t("Check for updates", "Проверить обновления", "Перевірити оновлення", "Праверыць абнаўленні"))
+        on(updButton, "clicked") { [unowned self] in self.checkForUpdates(userInitiated: true) }
+        cg_header_end(header, updButton)
         cg_toolbar_top(tv, header)
+
+        // Плашка «Доступна версия …» — появляется, когда на GitHub есть версия новее.
+        banner = cg_banner("")
+        on(banner, "button-clicked") { [unowned self] in self.installUpdate() }
+        cg_toolbar_top(tv, banner)
 
         // Панель: iPod, качество, папка, фильтр
         let bar = cg_box(0, 10)!
@@ -216,9 +228,63 @@ final class LinuxWindow {
 
         cg_window_set_content(window, tv)
         engine.onChange = { [unowned self] in self.scheduleRefresh() }
+        LinuxUpdater.shared.onChange = { [unowned self] in self.updateBanner() }
+        LinuxUpdater.shared.checkOnLaunch()
         updateQuality()
         refresh(rebuild: true)
         cg_present(window)
+    }
+
+    // MARK: Обновление
+
+    private func checkForUpdates(userInitiated: Bool) {
+        Task { @MainActor in
+            let r = await LinuxUpdater.shared.check()
+            if userInitiated && r == nil {
+                cg_toast(toasts, L.t("You have the latest version (\(AppVersion.current))", "У вас последняя версия (\(AppVersion.current))",
+                                     "У вас остання версія (\(AppVersion.current))", "У вас апошняя версія (\(AppVersion.current))"))
+            }
+        }
+    }
+
+    private func updateBanner() {
+        guard let r = LinuxUpdater.shared.available else { cg_banner_reveal(banner, 0); return }
+        cg_banner_title(banner, L.t("iPod Converter \(r.version) is available (you have \(AppVersion.current))",
+                                    "Доступна версия \(r.version) (у вас \(AppVersion.current))",
+                                    "Доступна версія \(r.version) (у вас \(AppVersion.current))",
+                                    "Даступная версія \(r.version) (у вас \(AppVersion.current))"))
+        let label: String
+        switch LinuxUpdater.kind {
+        case .userLocal: label = L.t("Update and restart", "Обновить и перезапустить", "Оновити й перезапустити", "Абнавіць і перазапусціць")
+        case .deb: label = L.t("Download and install", "Скачать и установить", "Завантажити й встановити", "Спампаваць і ўсталяваць")
+        case .other: label = L.t("Open the download page", "Открыть страницу загрузки", "Відкрити сторінку завантаження", "Адкрыць старонку загрузкі")
+        }
+        cg_banner_button(banner, label)
+        cg_banner_reveal(banner, 1)
+    }
+
+    private func installUpdate() {
+        guard let r = LinuxUpdater.shared.available, !updating else { return }
+        updating = true
+        cg_banner_button(banner, L.t("Downloading…", "Загрузка…", "Завантаження…", "Загрузка…"))
+        Task { @MainActor in
+            do {
+                switch try await LinuxUpdater.shared.install(r) {
+                case .restarted: break
+                case .openedInstaller:
+                    cg_toast(toasts, L.t("The installer opened — confirm the update there, then start iPod Converter again",
+                                         "Открылся установщик — подтвердите обновление и запустите iPod Converter заново",
+                                         "Відкрився інсталятор — підтвердьте оновлення й запустіть iPod Converter знову",
+                                         "Адкрыўся ўсталёўшчык — пацвердзіце абнаўленне і запусціце iPod Converter зноў"))
+                case .openedPage: break
+                }
+            } catch {
+                cg_toast(toasts, error.localizedDescription)
+                AppLog.error("Update failed: \(error.localizedDescription)")
+            }
+            updating = false
+            updateBanner()
+        }
     }
 
     // MARK: Действия

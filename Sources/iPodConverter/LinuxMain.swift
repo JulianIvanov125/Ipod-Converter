@@ -19,7 +19,7 @@ enum LinuxMain {
         // Движок для окна WinUI: команды в stdin, состояние в stdout (JSON-строки).
         if args.first == "serve" { EngineServer.run() }
         // Без команды или с путями к файлам («Открыть с помощью») — окно.
-        guard let cmd = args.first, ["convert", "dups", "models"].contains(cmd) else {
+        guard let cmd = args.first, ["convert", "dups", "models", "update", "version"].contains(cmd) else {
             #if os(Windows)
             WindowsApp.run(files: args.map { URL(fileURLWithPath: $0) })
             #else
@@ -39,6 +39,28 @@ enum LinuxMain {
     @MainActor
     static func runCommand(_ cmd: String, _ rest: [String]) async -> Int32 {
         switch cmd {
+        case "version":
+            print(AppVersion.current)
+            return 0
+        #if os(Linux)
+        case "update":
+            // ipod-converter update [--install]: проверить новую версию и, с --install, поставить её.
+            guard let r = await LinuxUpdater.shared.check() else {
+                print("Up to date (\(AppVersion.current))"); return 0
+            }
+            print("Available: \(r.version) (current \(AppVersion.current)), install kind: \(LinuxUpdater.kind)")
+            guard rest.contains("--install") else { print("Run with --install to update."); return 0 }
+            do {
+                switch try await LinuxUpdater.shared.install(r) {
+                case .restarted: return 0
+                case .openedInstaller(let f): print("Opened the installer for \(f.path)")
+                case .openedPage(let u): print("Opened \(u.absoluteString)")
+                }
+                return 0
+            } catch {
+                print("Update failed: \(error.localizedDescription)"); return 1
+            }
+        #endif
         case "models":
             for m in IPodModel.allCases {
                 let s = m.settings(max: false)
@@ -112,7 +134,7 @@ enum LinuxMain {
             if toITunes { syncFailed = await addToITunes(engine) }
             return max(r.failed, failed) + syncFailed == 0 ? 0 : 1
         default:
-            print("Commands: convert, dups, models")
+            print("Commands: convert, dups, models, update, version")
             return 2
         }
     }
