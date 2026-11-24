@@ -163,6 +163,21 @@ struct EncodeSettings: Equatable {
     }
 
     /// Итоговое разрешение: вписываем в w×h, не увеличиваем, чётные стороны.
+    /// Не раздувать «бедные» исходники: битрейт видео — не больше исходного × 1,3 (запас на перекодирование
+    /// и на менее экономный Baseline), но не ниже 500 кбит/с. Деталей больше, чем в исходнике, не появится —
+    /// клип на 786 кбит/с в 2 Мбит/с просто весил бы вдвое больше. Битрейт исходника неизвестен — пресет как есть.
+    func cappedBitrate(for info: MediaInfo?) -> EncodeSettings {
+        guard let src = info?.videoBitrate, src > 0 else { return self }
+        let cap = max(500, Int(Double(src) / 1000 * 1.3))
+        guard cap < videoKbps else { return self }
+        var s = self
+        let ratio = Double(cap) / Double(videoKbps)
+        s.videoKbps = cap
+        s.maxrateKbps = max(cap, Int(Double(maxrateKbps) * ratio))
+        s.bufsizeKbps = max(s.maxrateKbps, Int(Double(bufsizeKbps) * ratio))
+        return s
+    }
+
     func outputSize(for info: MediaInfo) -> (w: Int, h: Int) {
         let sw = max(info.displayWidth, 2), sh = max(info.displayHeight, 2)
         let scale = min(Double(w) / Double(sw), Double(h) / Double(sh), 1.0)

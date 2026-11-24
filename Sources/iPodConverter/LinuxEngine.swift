@@ -267,7 +267,7 @@ final class LinuxEngine {
     private func convert(_ v: LinuxVideo, ffmpeg: String) async -> Bool {
         guard let info = v.info else { return false }
         let meta = v.meta ?? VideoMeta(category: .film, title: v.url.deletingPathExtension().lastPathComponent)
-        let s = settings
+        let s = settings.cappedBitrate(for: info)
         let (folder, base) = OutputNaming.destination(for: meta, videoRoot: videoRoot, fallback: v.url)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let output = OutputNaming.uniqueURL(in: folder, base: "\(base) [\(model.fileSuffix)]", ext: s.container.rawValue)

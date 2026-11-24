@@ -395,7 +395,8 @@ final class Store {
 
     /// Настройки для конкретного видео: его собственные или общие.
     func settings(for item: VideoItem) -> EncodeSettings {
-        let base = model.settings(max: maxQuality)
+        // Свой битрейт в «Выход» (общий или у видео) перекрывает ограничение — apply ставит его поверх.
+        let base = model.settings(max: maxQuality).cappedBitrate(for: item.info)
         if let o = item.outputOverride { return o.apply(to: base) }
         return VideoOutputSettings.shared.apply(to: base)
     }
