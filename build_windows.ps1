@@ -3,11 +3,13 @@
 # ffmpeg.exe и ffprobe.exe нужной архитектуры — папка в -FFmpegDir (или в PATH).
 #   powershell -ExecutionPolicy Bypass -File build_windows.ps1 -Arch x64 -FFmpegDir C:\Tools\ffmpeg-win64\bin
 # На ARM64-машине x64 собирается кросс-компиляцией (и запускается там же через эмуляцию — можно проверить).
-# Результат: build-windows\<arch>\iPod Converter\ и архив build-windows\iPod-Converter-<версия>-Windows-<arch>.zip
+# Результат: build-windows\<arch>\iPod Converter\ и архив build-windows\iPod-Converter-<версия>-Windows-<arch>.zip;
+# с -Installer — ещё build-windows\iPod-Converter-<версия>-Windows-<arch>-Setup.exe (нужен Inno Setup 6: winget install JRSoftware.InnoSetup).
 param(
     [ValidateSet("arm64", "x64")][string]$Arch = $(if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }),
     [string]$FFmpegDir = "",
-    [string]$Version = ""   # по умолчанию — из Info.plist
+    [string]$Version = "",  # по умолчанию — из Info.plist
+    [switch]$Installer      # ещё и установщик Setup.exe (Inno Setup 6)
 )
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -48,3 +50,15 @@ tar.exe -a -c -f $zip -C $out "iPod Converter"
 if ($LASTEXITCODE -ne 0) { throw "zip failed" }
 $size = (Get-Item $zip).Length / 1MB
 Write-Host ("Done: {0}  ({1:N0} MB)" -f $zip, $size)
+
+if ($Installer) {
+    Write-Host "== installer"
+    $iscc = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source,
+              "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) not found: winget install JRSoftware.InnoSetup" }
+    & $iscc /Q "/DAppVersion=$version" "/DArch=$Arch" "/DSourceDir=$dist" "/DOutputDir=$(Join-Path $PSScriptRoot 'build-windows')" windows\installer.iss
+    if ($LASTEXITCODE -ne 0) { throw "installer failed" }
+    $setup = Join-Path $PSScriptRoot "build-windows\iPod-Converter-$version-Windows-$Arch-Setup.exe"
+    Write-Host ("Done: {0}  ({1:N0} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
+}
