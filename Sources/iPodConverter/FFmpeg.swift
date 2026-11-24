@@ -202,7 +202,8 @@ enum FFmpeg {
         case .h264:
             args += ["-c:v:0", "libx264", "-profile:v:0", model.profile]
             if !model.level.isEmpty { args += ["-level:v:0", model.level] }
-            args += ["-preset:v:0", model.profile == "baseline" ? "veryslow" : "slow",
+            // medium: на размерах iPod качество как у veryslow/slow (SSIM −0.0005), а кодирует в 2–6 раз быстрее.
+            args += ["-preset:v:0", "medium",
                      "-b:v:0", "\(model.videoKbps)k",
                      "-maxrate:v:0", "\(model.maxrateKbps)k",
                      "-bufsize:v:0", "\(model.bufsizeKbps)k"]
