@@ -309,13 +309,23 @@ struct IPodTabs: View {
     @Bindable var store: Store
     @State private var pendingRemoval: IPodModel?
 
+    /// Имя iPod из его базы; у 5G/5.5G (сам iPod модель не сообщает) — с моделью, под которую конвертируем,
+    /// если в имени её нет или стоит другая: «Julian’s iPod 5G · iPod 5.5G». Совпадает — имя как есть.
+    static func title(name: String, model m: IPodModel, ambiguous: Bool) -> String {
+        guard ambiguous else { return name }
+        let says55 = name.range(of: #"5[.,]5\s*G"#, options: [.regularExpression, .caseInsensitive]) != nil
+        let says5 = name.range(of: #"(?<![.,\d])5\s*G"#, options: [.regularExpression, .caseInsensitive]) != nil
+        let matches = m == .classic55G ? says55 : (says5 && !says55)
+        return matches ? name : "\(name) · \(m.title)"
+    }
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(store.favoriteModels) { m in
                 let dev = IPodDetector.shared.device(for: m)
                 IPodTab(
                     // Подключённый iPod — его собственное имя («Julian’s iPod Nano 7»), конвертация — под модель вкладки.
-                    title: dev.map { $0.name ?? L.yourIPod(m.title) } ?? m.title,
+                    title: dev.map { d in d.name.map { IPodTabs.title(name: $0, model: m, ambiguous: d.ambiguous) } ?? L.yourIPod(m.title) } ?? m.title,
                     connected: dev != nil,
                     // Память — только у подключённых (у остальных вкладок iPod нет под рукой).
                     storage: dev.flatMap { d in d.totalBytes.map { (free: d.freeBytes ?? 0, total: $0) } },
