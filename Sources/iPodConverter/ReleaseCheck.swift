@@ -1,10 +1,12 @@
-#if !os(macOS)
+// Только Linux: на Windows окно обновляется само (windows/WinUI/Updater.cs), а FoundationNetworking тянет curl.lib,
+// которого нет в статическом SDK Swift для Windows — движок с -static-stdlib не линкуется.
+#if os(Linux)
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
 
-/// Последний релиз на GitHub — для Linux и Windows (на Mac — Updater.swift).
+/// Последний релиз на GitHub — для Linux (на Mac — Updater.swift, на Windows — Updater.cs окна).
 /// Контрольную сумму берём из поля digest в API: файл .sha256 не качаем (не растёт счётчик загрузок).
 struct ReleaseInfo {
     struct Asset {

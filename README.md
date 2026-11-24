@@ -123,10 +123,15 @@ The server runs without a window and uses the output folder chosen in the app, s
 
 Windows 10 (version 2004 or later) or Windows 11, on a regular PC (x64) or an ARM laptop (ARM64).
 
-1. Download `iPod-Converter-<version>-Windows-x64.zip` (most PCs) or `-Windows-arm64.zip` (Snapdragon / ARM)
-   from [Releases](https://github.com/JulianIvanov125/Ipod-Converter/releases/latest).
-2. Unzip it anywhere and run **iPod Converter.exe** — nothing to install, FFmpeg is included.
-3. The app is not signed: if SmartScreen warns, click **More info → Run anyway**.
+1. Download `iPod-Converter-<version>-Windows-x64-Setup.exe` (most PCs) or `-Windows-arm64-Setup.exe` (Snapdragon / ARM)
+   from [Releases](https://github.com/JulianIvanov125/Ipod-Converter/releases/latest) and run it — for all users or just
+   for you; Start menu shortcut, uninstall from Settings → Apps. FFmpeg is included.
+2. The app is not signed: if SmartScreen warns, click **More info → Run anyway**.
+3. Installed with the Setup, the app checks for updates by itself (and from **Output → Check for Updates…**) and
+   installs a new version in one click, checking its SHA-256 first.
+
+Prefer no installer? Take `iPod-Converter-<version>-Windows-<arch>.zip`, unzip it anywhere and run
+**iPod Converter.exe** (a zip copy only tells you about new versions).
 
 The window (WinUI 3) has the same presets as the Mac app: add files or folders or drag them in, choose the iPod and
 Standard / Maximum, pick the output folder and press Convert. The list shows covers, progress and before → after;
@@ -176,8 +181,8 @@ and an FFmpeg build for the target architecture:
 powershell -ExecutionPolicy Bypass -File build_windows.ps1 -Arch x64 -FFmpegDir C:\Tools\ffmpeg\bin
 ```
 
-The result is `build-windows\<arch>\iPod Converter\` and a zip next to it; on an ARM64 PC the x64 version is
-cross-compiled.
+The result is `build-windows\<arch>\iPod Converter\` and a zip next to it; add `-Installer` for the Setup.exe
+([Inno Setup 6](https://jrsoftware.org/isinfo.php)). On an ARM64 PC the x64 version is cross-compiled.
 
 **Linux** — see [docs/LINUX.md](docs/LINUX.md) (`./build_linux.sh`).
 
