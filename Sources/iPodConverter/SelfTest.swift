@@ -74,11 +74,16 @@ enum SelfTest {
             Task { @MainActor in
                 print("сравнение версий: 1.3.10>1.3.9 \(Updater.isNewer("1.3.10", than: "1.3.9")), 1.4>1.3.1 \(Updater.isNewer("1.4", than: "1.3.1")), 1.3.1>1.3.1 \(Updater.isNewer("1.3.1", than: "1.3.1"))")
                 if let r = try? await Updater.fetchLatest() {
-                    print("GitHub: последний \(r.version), dmg \(r.dmg != nil), sha256 \(r.sha256 != nil), новее текущей \(Updater.isNewer(r.version, than: Updater.currentVersion))")
+                    print("GitHub: последний \(r.version), dmg \(r.dmg != nil), digest \(r.dmgSHA256 ?? "нет"), sha256 \(r.sha256 != nil), новее текущей \(Updater.isNewer(r.version, than: Updater.currentVersion))")
                 }
                 print("можно заменить на месте: \(Updater.canReplaceInPlace) (\(Bundle.main.bundleURL.path))")
                 do {
-                    let app = try await Updater.prepare(dmg: URL(fileURLWithPath: args[i + 1]), sha: URL(fileURLWithPath: args[i + 2]), version: args[i + 3]) { _ in }
+                    // Третий аргумент — файл .sha256 или «sha256:<hex>», как поле digest в API GitHub.
+                    let shaArg = args[i + 2]
+                    let app = try await Updater.prepare(dmg: URL(fileURLWithPath: args[i + 1]),
+                                                        expectedSHA256: shaArg.hasPrefix("sha256:") ? String(shaArg.dropFirst(7)) : nil,
+                                                        sha: shaArg.hasPrefix("sha256:") ? nil : URL(fileURLWithPath: shaArg),
+                                                        version: args[i + 3]) { _ in }
                     print("подготовлено: \(app.lastPathComponent) — перезапуск")
                     // Как у пользователя: окно обновления открыто листом — раньше из-за него выход отменялся.
                     Updater.shared.phase = .installing

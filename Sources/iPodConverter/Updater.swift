@@ -3,8 +3,8 @@ import CryptoKit
 import Observation
 import SwiftUI
 
-/// Обновление по клику: последний релиз на GitHub → скачать DMG → сверить SHA-256 (файл .sha256 рядом
-/// в релизе) → достать приложение → закрыться, подменить себя и запуститься заново.
+/// Обновление по клику: последний релиз на GitHub → скачать DMG → сверить SHA-256 (поле digest файла в API
+/// GitHub; файл .sha256 в релизе — только если digest нет) → достать приложение → закрыться, подменить себя и запуститься заново.
 /// Если подменить нельзя (нет прав на папку, нет контрольной суммы) — открываем страницу релиза.
 @MainActor
 @Observable
@@ -17,6 +17,9 @@ final class Updater {
         let notes: String
         let page: URL
         let dmg: URL?
+        /// SHA-256 DMG из API GitHub (поле digest) — без отдельного скачивания, не попадает в счётчик загрузок.
+        let dmgSHA256: String?
+        /// Файл .sha256 в релизе: запасной путь, если digest нет. Нужен и старым версиям 1.4–1.4.6.
         let sha256: URL?
     }
 
@@ -99,8 +102,12 @@ final class Updater {
             assets.first { ($0["name"] as? String)?.hasSuffix(suffix) == true }
                 .flatMap { $0["browser_download_url"] as? String }.flatMap(URL.init(string:))
         }
+        let dmgDigest = assets.first { ($0["name"] as? String)?.hasSuffix(".dmg") == true }
+            .flatMap { $0["digest"] as? String }
+            .flatMap { d -> String? in d.hasPrefix("sha256:") ? String(d.dropFirst(7)).lowercased() : nil }
         return Release(version: tag.hasPrefix("v") ? String(tag.dropFirst()) : tag,
-                       notes: j["body"] as? String ?? "", page: page, dmg: asset(".dmg"), sha256: asset(".dmg.sha256"))
+                       notes: j["body"] as? String ?? "", page: page, dmg: asset(".dmg"),
+                       dmgSHA256: dmgDigest, sha256: asset(".dmg.sha256"))
     }
 
     struct Failure: LocalizedError {
@@ -117,14 +124,14 @@ final class Updater {
     }
 
     func install(_ r: Release) {
-        guard let dmg = r.dmg, let sha = r.sha256, Self.canReplaceInPlace else {
+        guard let dmg = r.dmg, r.dmgSHA256 != nil || r.sha256 != nil, Self.canReplaceInPlace else {
             NSWorkspace.shared.open(r.page)
             return
         }
         phase = .downloading(0)
         Task {
             do {
-                let newApp = try await Self.prepare(dmg: dmg, sha: sha, version: r.version) { p in
+                let newApp = try await Self.prepare(dmg: dmg, expectedSHA256: r.dmgSHA256, sha: r.sha256, version: r.version) { p in
                     Task { @MainActor in if case .downloading = self.phase { self.phase = .downloading(p) } }
                 }
                 phase = .installing
@@ -138,13 +145,17 @@ final class Updater {
     }
 
     /// Скачать, сверить SHA-256, смонтировать DMG и скопировать приложение рядом с текущим (тот же диск).
-    nonisolated static func prepare(dmg: URL, sha: URL, version: String, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+    nonisolated static func prepare(dmg: URL, expectedSHA256: String? = nil, sha: URL?, version: String,
+                                    progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appendingPathComponent("iPodConverter-update-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
 
-        let expected = String(decoding: try await URLSession.shared.data(from: sha).0, as: UTF8.self)
-            .split(whereSeparator: { $0 == " " || $0 == "\n" }).first.map { String($0).lowercased() } ?? ""
+        var expected = expectedSHA256 ?? ""
+        if expected.count != 64, let sha {
+            expected = String(decoding: try await URLSession.shared.data(from: sha).0, as: UTF8.self)
+                .split(whereSeparator: { $0 == " " || $0 == "\n" }).first.map { String($0).lowercased() } ?? ""
+        }
         guard expected.count == 64 else { throw Failure(L.updNoChecksum) }
 
         let file = work.appendingPathComponent("update.dmg")
@@ -253,14 +264,14 @@ struct UpdateView: View {
                 .frame(height: 220)
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Theme.tint(0.05)))
-                if !Updater.canReplaceInPlace || r.sha256 == nil {
+                if !Updater.canReplaceInPlace || (r.dmgSHA256 == nil && r.sha256 == nil) {
                     Text(L.updManualHint).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
                     Button(L.updSkip) { u.skip(r); dismiss() }
                     Spacer()
                     Button(L.updLater) { u.showWindow = false; dismiss() }.keyboardShortcut(.cancelAction)
-                    Button(Updater.canReplaceInPlace && r.sha256 != nil ? L.updInstall : L.updOpenPage) { u.install(r) }
+                    Button(Updater.canReplaceInPlace && (r.dmgSHA256 != nil || r.sha256 != nil) ? L.updInstall : L.updOpenPage) { u.install(r) }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                 }
