@@ -159,11 +159,16 @@ enum FFmpeg {
     // MARK: - Конвертация
 
     static func arguments(input: URL, output: URL, info: MediaInfo, settings model: EncodeSettings,
-                          cover: URL?, meta: VideoMeta? = nil, ipod: String? = nil) -> [String] {
+                          cover: URL?, meta: VideoMeta? = nil, ipod: String? = nil,
+                          preparedAudio: URL? = nil) -> [String] {
         let size = model.outputSize(for: info)
         var args = ["-hide_banner", "-nostdin", "-y"] + decodeArgs(info) + ["-i", input.path]
         if let cover { args += ["-i", cover.path] }
-        let audioMap = info.audioStreamIndex.map { "0:\($0)" } ?? "0:a:0?"
+        // Звук, уже закодированный заранее без перегруза (Linux: см. preparePeakSafeAudio), — последний вход.
+        if let preparedAudio { args += ["-i", preparedAudio.path] }
+        let audioInput = cover != nil ? 2 : 1
+        let audioMap = preparedAudio != nil ? "\(audioInput):a:0"
+            : (info.audioStreamIndex.map { "0:\($0)" } ?? "0:a:0?")
         let deinterlace = info.interlaced ? "yadif," : ""
         args += [
             "-map", "0:V:0", "-map", audioMap,
@@ -190,7 +195,9 @@ enum FFmpeg {
         if cover != nil {
             args += ["-map", "1:0", "-c:v:1", "copy", "-disposition:v:1", "attached_pic"]
         }
-        if info.hasAudio {
+        if preparedAudio != nil {
+            args += ["-c:a", "copy"]
+        } else if info.hasAudio {
             // Кодер Apple (AudioToolbox), если есть: встроенный AAC ffmpeg на громких клипах даёт пики до +4 дБ
             // выше нуля — iPod их обрезает, слышно «пшш/ксс». Ограничитель на −1 дБ оставляет запас.
             let enc = hasAudioToolboxAAC ? "aac_at" : "aac"
@@ -200,6 +207,42 @@ enum FFmpeg {
         if let meta { args += metadataArguments(meta, ipod: ipod) }
         args += ["-movflags", "+faststart", "-f", model.container.muxer, "-progress", "pipe:1", "-nostats", output.path]
         return args
+    }
+
+    /// Пик декодированного звука в дБ (0 — полная шкала).
+    static func peakDB(_ url: URL) async -> Double? {
+        guard let ffmpeg = tool("ffmpeg"),
+              let r = try? await ProcessRunner.run(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-i", url.path,
+                                                           "-map", "0:a:0", "-af", "astats=measure_perchannel=none",
+                                                           "-f", "null", "-"], timeout: 600) else { return nil }
+        let text = String(decoding: r.err, as: UTF8.self)
+        guard let overall = text.range(of: "Overall") else { return nil }
+        let tail = text[overall.upperBound...]
+        guard let line = tail.split(separator: "\n").first(where: { $0.contains("Peak level dB:") }),
+              let v = line.split(separator: ":").last.flatMap({ Double($0.trimmingCharacters(in: .whitespaces)) }) else { return nil }
+        return v
+    }
+
+    /// Звук для видео без перегруза, когда нет кодера Apple: встроенный AAC ffmpeg на 160 кбит/с даёт пики
+    /// до +5 дБ, iPod их обрезает (треск). Кодируем, меряем пик и при перегрузе перекодируем с поправкой
+    /// громкости на точную величину (до трёх попыток). Возвращает файл .m4a или nil (тогда — обычный путь).
+    static func preparePeakSafeAudio(input: URL, info: MediaInfo, settings model: EncodeSettings, workDir: URL) async -> URL? {
+        guard info.hasAudio, let ffmpeg = tool("ffmpeg") else { return nil }
+        try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        let out = workDir.appendingPathComponent("audio-\(UUID().uuidString).m4a")
+        let map = info.audioStreamIndex.map { "0:\($0)" } ?? "0:a:0"
+        var gain = 0.0
+        for _ in 0..<3 {
+            let filter = (gain < 0 ? String(format: "volume=%.2fdB,", gain) : "") + "alimiter=limit=0.891:level=false"
+            let r = try? await ProcessRunner.run(ffmpeg, ["-hide_banner", "-nostdin", "-y", "-i", input.path, "-map", map,
+                                                         "-vn", "-sn", "-af", filter, "-c:a", "aac",
+                                                         "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)",
+                                                         "-ac", "2", out.path], timeout: 1800)
+            guard r?.status == 0, let peak = await peakDB(out) else { try? FileManager.default.removeItem(at: out); return nil }
+            if peak <= -0.1 { return out }
+            gain -= peak + 0.5
+        }
+        return out   // после трёх попыток — лучшее, что есть (запас уже большой)
     }
 
     /// Теги iTunes: тип (stik), шоу/сезон/серия для сериалов, артист для клипов, год для фильмов.

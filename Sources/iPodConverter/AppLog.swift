@@ -1,11 +1,21 @@
 import Foundation
 
-/// Журнал приложения: ~/Library/Logs/iPod Converter/iPodConverter.log.
+/// Журнал приложения: ~/Library/Logs/iPod Converter/iPodConverter.log (Linux: ~/.local/state/ipod-converter).
 /// Что конвертировалось, ошибки ffmpeg и «Музыки», подключения iPod. Домашняя папка заменяется на «~»,
 /// чтобы в отчёт не попадало имя пользователя. Больше 2 МБ — старый журнал уходит в .1 (хранится один).
 enum AppLog {
-    static let folder: URL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Logs/iPod Converter", isDirectory: true)
+    static let folder: URL = {
+        #if os(macOS)
+        return FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/iPod Converter", isDirectory: true)
+        #else
+        // Linux: ~/.local/state/ipod-converter (XDG_STATE_HOME). ~/Library там нет.
+        let env = ProcessInfo.processInfo.environment["XDG_STATE_HOME"]
+        let base = env.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state", isDirectory: true)
+        return base.appendingPathComponent("ipod-converter", isDirectory: true)
+        #endif
+    }()
     static let file = folder.appendingPathComponent("iPodConverter.log")
     private static let old = folder.appendingPathComponent("iPodConverter.1.log")
     private static let queue = DispatchQueue(label: "local.ipodconverter.log", qos: .utility)
