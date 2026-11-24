@@ -183,8 +183,11 @@ final class IPodDetector {
                 if free.count == 1 && usb.filter({ u in !volumes.contains { $0.guid == u.serial } }).count == 1 { vol = free.first }
             }
             if let v = vol { usedVolumes.insert(v.path) }
-            guard var model = model(forUSB: dev.pid, modelNumbers: vol.map { [$0.modelNumber] } ?? []) else { continue }
-            let ambiguous = dev.pid == 0x1209 && (vol?.modelNumber ?? "").isEmpty
+            // Номер модели: из SysInfo на диске, иначе — по серийному номеру Apple из «паспорта» macOS.
+            var numbers = vol.map { [$0.modelNumber] }?.filter { !$0.isEmpty } ?? []
+            if numbers.isEmpty, let n = modelNumberFromAppleSerial(usbSerial: dev.serial) { numbers = [n] }
+            guard var model = model(forUSB: dev.pid, modelNumbers: numbers) else { continue }
+            let ambiguous = dev.pid == 0x1209 && numbers.isEmpty
             if let o = overrides[dev.serial], let m = IPodModel(rawValue: o) {
                 model = m
             } else if ambiguous && preferEnhanced5G {
@@ -350,6 +353,38 @@ final class IPodDetector {
         }
         return nil
     }
+
+    /// macOS (Finder/AMPDevices) ведёт «паспорт» подключавшихся iPod в com.apple.iPod: там серийный номер Apple.
+    /// Его последние три символа — модель (таблица как в libgpod). Так отличаем 5.5G от 5G, когда в SysInfo на диске
+    /// номера модели нет (модифицированные iPod с пустым SysInfo). Ключ записи — GUID, который на некоторых iPod
+    /// отличается от USB-номера одной цифрой, поэтому сравниваем и по общему «хвосту».
+    nonisolated static func modelNumberFromAppleSerial(usbSerial: String) -> String? {
+        CFPreferencesAppSynchronize("com.apple.iPod" as CFString)
+        guard !usbSerial.isEmpty,
+              let devices = CFPreferencesCopyAppValue("Devices" as CFString, "com.apple.iPod" as CFString) as? [String: [String: Any]]
+        else { return nil }
+        func tail(_ a: String, _ b: String) -> Int { zip(a.uppercased().reversed(), b.uppercased().reversed()).prefix { $0 == $1 }.count }
+        let video = devices.filter { ($0.value["Family ID"] as? Int) == 6 }   // iPod with video (5G/5.5G)
+        let record = devices.first { $0.key.uppercased() == usbSerial.uppercased() }?.value
+            ?? video.filter { tail($0.key, usbSerial) >= 6 }.max { tail($0.key, usbSerial) < tail($1.key, usbSerial) }?.value
+            ?? (video.count == 1 ? video.first?.value : nil)
+        guard let serial = record?["Serial Number"] as? String, serial.count >= 3 else { return nil }
+        return videoSerialSuffixes[String(serial.suffix(3)).uppercased()]
+    }
+
+    /// Суффикс серийного номера → номер модели (iPod 5G/5.5G). «WEE» встречается у обоих — не используем.
+    nonisolated static let videoSerialSuffixes: [String: String] = [
+        // 5G
+        "SZ9": "A002", "WEC": "A002", "WED": "A002", "WEG": "A002", "WEH": "A002", "WEL": "A002",
+        "TXK": "A146", "TXM": "A146", "WEF": "A146", "WEJ": "A146", "WEK": "A146",
+        "SZA": "A003", "SZU": "A003", "TXL": "A147", "TXN": "A147",
+        // 5.5G
+        "V9K": "A444", "V9L": "A444", "WU9": "A444",
+        "VQM": "A446", "V9M": "A446", "V9N": "A446",
+        "V9P": "A448", "V9Q": "A448",
+        "V9R": "A450", "V9S": "A450", "V95": "A450", "V96": "A450", "WUC": "A450",
+        "W9G": "A664",
+    ]
 
     /// USB idProduct (+ номер модели, если известен) → модель в приложении.
     nonisolated static func model(forUSB pid: Int, modelNumbers: [String]) -> IPodModel? {
