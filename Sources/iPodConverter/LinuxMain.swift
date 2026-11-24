@@ -16,6 +16,8 @@ enum LinuxMain {
         setvbuf(stdout, nil, _IOLBF, 0)
         #endif
         let args = Array(CommandLine.arguments.dropFirst())
+        // Движок для окна WinUI: команды в stdin, состояние в stdout (JSON-строки).
+        if args.first == "serve" { EngineServer.run() }
         // Без команды или с путями к файлам («Открыть с помощью») — окно.
         guard let cmd = args.first, ["convert", "dups", "models"].contains(cmd) else {
             #if os(Windows)

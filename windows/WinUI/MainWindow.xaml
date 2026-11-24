@@ -1,0 +1,191 @@
+<Window
+    x:Class="IPodConverter.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:IPodConverter"
+    Title="iPod Converter">
+
+    <Grid x:Name="Root" AllowDrop="True" DragOver="Root_DragOver" Drop="Root_Drop">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Заголовок окна (свой, поверх Mica) -->
+        <Grid x:Name="AppTitleBar" Height="40" Padding="16,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="Assets/AppIcon-64.png" Width="18" Height="18" />
+                <TextBlock Text="iPod Converter" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Панель: добавить, iPod, качество, выход, конвертировать -->
+        <Grid Grid.Row="1" Padding="16,4,16,8" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="AddFilesButton" Click="AddFiles_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                    <TextBlock x:Name="AddFilesText" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="AddFolderButton" Grid.Column="1" Click="AddFolder_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE8F4;" FontSize="14" />
+                    <TextBlock x:Name="AddFolderText" />
+                </StackPanel>
+            </Button>
+
+            <ComboBox x:Name="ModelBox" Grid.Column="2" MinWidth="190" Margin="12,0,0,0"
+                      DisplayMemberPath="Title" SelectionChanged="ModelBox_SelectionChanged" />
+
+            <StackPanel x:Name="QualityPanel" Grid.Column="3" Orientation="Horizontal" Spacing="0">
+                <ToggleButton x:Name="StandardButton" Click="Standard_Click" CornerRadius="4,0,0,4" />
+                <ToggleButton x:Name="MaxButton" Click="Max_Click" CornerRadius="0,4,4,0" />
+            </StackPanel>
+
+            <DropDownButton x:Name="OutputButton" Grid.Column="5">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE838;" FontSize="14" />
+                    <TextBlock x:Name="OutputText" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <DropDownButton.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem x:Name="OutputPathItem" IsEnabled="False" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="ChooseOutputItem" Click="ChooseOutput_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8DA;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="OpenOutputItem" Click="OpenOutput_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE838;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="ClearItem" Click="Clear_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <Button x:Name="ConvertButton" Grid.Column="6" Style="{StaticResource AccentButtonStyle}" MinWidth="150"
+                    Click="Convert_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon x:Name="ConvertIcon" Glyph="&#xE768;" FontSize="14" />
+                    <TextBlock x:Name="ConvertText" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <!-- Разделы списка -->
+        <Grid Grid.Row="2" Padding="12,0,16,4">
+            <SelectorBar x:Name="Tabs" SelectionChanged="Tabs_SelectionChanged">
+                <SelectorBarItem x:Name="TabAll" IsSelected="True" />
+                <SelectorBarItem x:Name="TabMusic" />
+                <SelectorBarItem x:Name="TabVideos" />
+                <SelectorBarItem x:Name="TabDups" />
+            </SelectorBar>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="12">
+                <TextBlock x:Name="PresetText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                <TextBlock x:Name="SummaryText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                <Button x:Name="TrashDupsButton" Visibility="Collapsed" Click="TrashDups_Click" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Список файлов -->
+        <Grid Grid.Row="3" Margin="12,0,12,8" CornerRadius="8"
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <ListView x:Name="List" SelectionMode="None" Padding="0,4,0,4">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:ItemViewModel">
+                        <Grid Padding="4,8,4,8" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="72" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <CheckBox MinWidth="0" IsChecked="{x:Bind IsChecked, Mode=OneWay}" Tag="{x:Bind Id}"
+                                      Click="Check_Click" VerticalAlignment="Center" IsEnabled="{x:Bind CanRemove, Mode=OneWay}" />
+
+                            <Border Grid.Column="1" Width="72" Height="48" CornerRadius="6"
+                                    Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                <Grid>
+                                    <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="20"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              Visibility="{x:Bind GlyphVisibility, Mode=OneWay}" />
+                                    <Image Source="{x:Bind Cover, Mode=OneWay}" Stretch="UniformToFill"
+                                           Visibility="{x:Bind CoverVisibility, Mode=OneWay}" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="1">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                    <Border Visibility="{x:Bind KeeperBadgeVisibility, Mode=OneWay}" CornerRadius="4" Padding="6,1,6,1"
+                                            Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}">
+                                        <TextBlock x:Name="KeeperBadge" Text="✓" FontSize="11" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}" Visibility="{x:Bind SubtitleVisibility, Mode=OneWay}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{x:Bind Detail, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="4" Visibility="{x:Bind AfterVisibility, Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE72A;" FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <TextBlock Text="{x:Bind After, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center" Spacing="4">
+                                <ProgressBar Value="{x:Bind ProgressPercent, Mode=OneWay}" Maximum="100"
+                                             IsIndeterminate="{x:Bind ProgressIndeterminate, Mode=OneWay}"
+                                             Visibility="{x:Bind ProgressVisibility, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind Status, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                           TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                <Button Tag="{x:Bind Id}" Click="Keep_Click" Visibility="{x:Bind KeepVisibility, Mode=OneWay}"
+                                        Content="{x:Bind local:Strings.KeepThis}" />
+                                <Button Tag="{x:Bind Id}" Click="ShowInFolder_Click" Visibility="{x:Bind OpenVisibility, Mode=OneWay}"
+                                        Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="{x:Bind local:Strings.ShowInFolder}">
+                                    <FontIcon Glyph="&#xE838;" FontSize="14" />
+                                </Button>
+                                <Button Tag="{x:Bind Id}" Click="Remove_Click" IsEnabled="{x:Bind CanRemove, Mode=OneWay}"
+                                        Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="{x:Bind local:Strings.Remove}">
+                                    <FontIcon Glyph="&#xE711;" FontSize="12" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Пустой список -->
+            <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                <FontIcon Glyph="&#xE896;" FontSize="44" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock x:Name="EmptyTitle" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+                <TextBlock x:Name="EmptyHint" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" MaxWidth="460" />
+            </StackPanel>
+        </Grid>
+
+        <InfoBar x:Name="Info" Grid.Row="4" Margin="12,0,12,12" IsOpen="False" />
+    </Grid>
+</Window>

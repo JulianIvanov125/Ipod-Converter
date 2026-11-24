@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Окно iPod Converter для Windows (WinUI 3). Конвертирует Swift-движок iPodConverter.exe (команда serve),
+       окно только управляет им: см. Sources/iPodConverter/EngineServer.swift. Сборка всего вместе — build_windows.ps1. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>IPodConverter</RootNamespace>
+    <AssemblyName>iPod Converter</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>ARM64;x64</Platforms>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Без MSIX-инструментов не собирается resources.pri — окно падает с «Cannot locate resource MainWindow.xaml». -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.4.7</Version>
+    <Product>iPod Converter</Product>
+    <Copyright>GPL-3.0</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 2.x собирается обычным `dotnet publish` (инструменты PRI/MSIX приходят NuGet-пакетом), Visual Studio не нужна. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
