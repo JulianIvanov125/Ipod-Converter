@@ -650,8 +650,18 @@ enum L {
 
     // Ошибки
     static func toolNotFound(_ tool: String) -> String {
+        #if os(Windows)
+        t("\(tool).exe not found. Put it next to iPodConverter.exe or add its folder to PATH",
+          "Не найден \(tool).exe. Положите его рядом с iPodConverter.exe или добавьте его папку в PATH",
+          "Не знайдено \(tool).exe. Покладіть його поруч з iPodConverter.exe або додайте його теку в PATH",
+          "Не знойдзены \(tool).exe. Пакладзіце яго побач з iPodConverter.exe або дадайце яго тэчку ў PATH")
+        #elseif os(Linux)
+        t("\(tool) not found. Install it: sudo apt install ffmpeg", "Не найден \(tool). Установите: sudo apt install ffmpeg",
+          "Не знайдено \(tool). Встановіть: sudo apt install ffmpeg", "Не знойдзены \(tool). Усталюйце: sudo apt install ffmpeg")
+        #else
         t("\(tool) not found. Install it: brew install ffmpeg", "Не найден \(tool). Установите: brew install ffmpeg",
           "Не знайдено \(tool). Встановіть: brew install ffmpeg", "Не знойдзены \(tool). Усталюйце: brew install ffmpeg")
+        #endif
     }
     static var noVideoTrack: String { t("The file has no video track", "В файле нет видеодорожки", "У файлі немає відеодоріжки", "У файле няма відэадарожкі") }
     static var unreadable: String { t("Couldn't read the file — is it really a video?", "Не удалось прочитать файл — это точно видео?", "Не вдалося прочитати файл — це точно відео?", "Не ўдалося прачытаць файл — гэта сапраўды відэа?") }

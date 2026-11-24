@@ -29,7 +29,7 @@ enum ITunesBridge {
     static var isInstalled: Bool {
         // iTunes регистрирует ProgID iTunes.Application в HKEY_CLASSES_ROOT.
         var key: HKEY?
-        let ok = RegOpenKeyExW(HKEY_CLASSES_ROOT, Array("iTunes.Application".utf16) + [0], 0, KEY_READ, &key) == ERROR_SUCCESS
+        let ok = RegOpenKeyExW(HKEY_CLASSES_ROOT, Array("iTunes.Application".utf16) + [0], 0, REGSAM(0x20019) /* KEY_READ — макрос, в Swift не виден */, &key) == ERROR_SUCCESS
         if let key { RegCloseKey(key) }
         return ok
     }

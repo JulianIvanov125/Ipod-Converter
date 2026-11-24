@@ -8,7 +8,12 @@ import Foundation
 @main
 enum LinuxMain {
     static func main() {
+        #if os(Windows)
+        // MSVC CRT: _IOLBF с размером 0 — недопустимый параметр, процесс падает (0xC0000409). Без буфера.
+        setvbuf(stdout, nil, _IONBF, 0)
+        #else
         setvbuf(stdout, nil, _IOLBF, 0)
+        #endif
         let args = Array(CommandLine.arguments.dropFirst())
         // Без команды или с путями к файлам («Открыть с помощью») — окно.
         guard let cmd = args.first, ["convert", "dups", "models"].contains(cmd) else {
@@ -82,8 +87,12 @@ enum LinuxMain {
             let r = await engine.convertAll()
             for t in engine.tracks { print(line(t.url, t.state)) }
             for v in engine.videos { print(line(v.url, v.state)) }
-            print("done: \(r.done), failed: \(r.failed)")
-            return r.failed == 0 ? 0 : 1
+            // Файлы, которые не открылись (нет ffprobe, битый файл), до конвертации не доходят — считаем и их.
+            let failed = (engine.tracks.map(\.state) + engine.videos.map(\.state)).filter {
+                if case .failed = $0 { return true } else { return false }
+            }.count
+            print("done: \(r.done), failed: \(max(r.failed, failed))")
+            return max(r.failed, failed) == 0 ? 0 : 1
         default:
             print("Commands: convert, dups, models")
             return 2

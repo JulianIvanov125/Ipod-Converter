@@ -49,7 +49,10 @@ enum FFmpeg {
         let exe = name + ".exe"
         let here = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
         var paths = [here.appendingPathComponent(exe).path, here.appendingPathComponent("ffmpeg/\(exe)").path]
-        for dir in (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ";") {
+        // На Windows переменная обычно называется «Path» — ищем без учёта регистра.
+        let env = ProcessInfo.processInfo.environment
+        let pathVar = env.first { $0.key.uppercased() == "PATH" }?.value ?? ""
+        for dir in pathVar.split(separator: ";") where !dir.isEmpty {
             paths.append(URL(fileURLWithPath: String(dir)).appendingPathComponent(exe).path)
         }
         return paths.first { FileManager.default.fileExists(atPath: $0) }
