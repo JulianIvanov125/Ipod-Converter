@@ -85,6 +85,8 @@ final class LinuxWindow {
     private var convertButton: Widget!
     private var clearButton: Widget!
     private var banner: Widget!
+    /// Плеер не смог (нет GStreamer или кодека) — открываем системным плеером.
+    private var playFallback: UnsafeMutableRawPointer!
     private var updating = false
     private var scope: Scope = .all
 
@@ -227,6 +229,12 @@ final class LinuxWindow {
         cg_toolbar_bottom(tv, bottom)
 
         cg_window_set_content(window, tv)
+        playFallback = Callbacks.pathsID(once: false) { [unowned self] p in
+            guard let path = p.first else { return }
+            LinuxUpdater.open(URL(fileURLWithPath: path))
+            cg_toast(self.toasts, L.t("Opened in your system player", "Открыто в системном плеере",
+                                      "Відкрито в системному програвачі", "Адкрыта ў сістэмным прайгравальніку"))
+        }
         engine.onChange = { [unowned self] in self.scheduleRefresh() }
         LinuxUpdater.shared.onChange = { [unowned self] in self.updateBanner() }
         LinuxUpdater.shared.checkOnLaunch()
@@ -288,6 +296,10 @@ final class LinuxWindow {
     }
 
     // MARK: Действия
+
+    private func play(_ url: URL, title: String, video: Bool) {
+        cg_play_file(window, url.path, title, video ? 1 : 0, runPaths, playFallback)
+    }
 
     private func choose(folders: Bool) {
         let title = folders ? L.t("Add folders", "Добавить папки", "Додати теки", "Дадаць тэчкі")
@@ -355,6 +367,7 @@ final class LinuxWindow {
         let state: LinuxItemState
         let cover: URL?
         let isVideo: Bool
+        var url: URL? = nil
         /// «было → стало» после конвертации (битрейт, размер; у видео ещё разрешение).
         var change: String = ""
         var dup: (keeper: Bool, groupStart: Bool)?
@@ -369,6 +382,7 @@ final class LinuxWindow {
                 var r = Row(id: t.id, title: t.info?.title.map { "\(t.info?.artist ?? "") — \($0)" } ?? t.url.lastPathComponent,
                     detail: t.info.map { "\($0.codec.uppercased()) · \($0.sampleRate / 1000) kHz · \(Fmt.duration($0.duration))" } ?? "",
                     state: t.state, cover: nil, isVideo: false)
+                r.url = t.url
                 if let a = t.info, let b = t.outInfo {
                     r.change = Self.change(a.bitrate, b.bitrate, a.fileSize, b.fileSize)
                 }
@@ -377,6 +391,7 @@ final class LinuxWindow {
             let vs = engine.videos.map { v in
                 var r = Row(id: v.id, title: v.meta.map { $0.artist.isEmpty ? $0.title : "\($0.artist) — \($0.title)" } ?? v.url.lastPathComponent,
                     detail: videoDetail(v), state: v.state, cover: v.cover, isVideo: true)
+                r.url = v.url
                 if let a = v.info, let b = v.outInfo {
                     r.change = "\(a.displayWidth)×\(a.displayHeight) → \(b.displayWidth)×\(b.displayHeight) · "
                         + Self.change(a.videoBitrate, b.videoBitrate, a.fileSize, b.fileSize)
@@ -391,6 +406,7 @@ final class LinuxWindow {
                     var r = Row(id: v.id, title: v.meta.map { $0.artist.isEmpty ? $0.title : "\($0.artist) — \($0.title)" } ?? v.url.lastPathComponent,
                                 detail: videoDetail(v) + "\n" + v.url.path, state: v.state, cover: v.cover, isVideo: true)
                     r.dup = (v.id == g.keeper.id, i == 0)
+                    r.url = v.url
                     out.append(r)
                 }
             }
@@ -520,6 +536,29 @@ final class LinuxWindow {
             cg_append(text, p)
             rowProgress[r.id] = p
             cg_append(row, text)
+
+            // ▶ оригинал и, если уже есть, ▶ готовый файл — проверить картинку и звук до синхронизации.
+            if let src = r.url {
+                let play = cg_icon_button("media-playback-start-symbolic")!
+                cg_css_class(play, "flat")
+                cg_valign(play, 3)
+                cg_tooltip(play, L.previewOriginal)
+                on(play, "clicked", row: true) { [unowned self] in self.play(src, title: r.title, video: r.isVideo) }
+                cg_append(row, play)
+            }
+            let result: URL? = {
+                switch r.state { case .done(let u), .kept(let u): return u; default: return nil }
+            }()
+            if let out = result {
+                let play = cg_button("▶ " + L.t("Converted", "Готовый", "Готовий", "Гатовы"))!
+                cg_css_class(play, "flat")
+                cg_valign(play, 3)
+                cg_tooltip(play, out.path)
+                on(play, "clicked", row: true) { [unowned self] in
+                    self.play(out, title: r.title + " — " + L.t("converted", "готовый", "готовий", "гатовы"), video: r.isVideo)
+                }
+                cg_append(row, play)
+            }
 
             if let d = r.dup {
                 let badge = cg_label(d.keeper ? L.dupKeeper : L.dupCopy)!

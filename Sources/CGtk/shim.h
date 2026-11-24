@@ -227,6 +227,38 @@ static inline void cg_banner_title(GtkWidget *b, const char *t) { adw_banner_set
 static inline void cg_banner_button(GtkWidget *b, const char *t) { adw_banner_set_button_label(ADW_BANNER(b), t); }
 static inline void cg_banner_reveal(GtkWidget *b, gboolean r) { adw_banner_set_revealed(ADW_BANNER(b), r); }
 
+// --- Плеер: окно с GtkVideo (GStreamer). Нет движка или кодека — fallback(path) открывает системный плеер ---
+typedef struct { cg_paths_cb fallback; void *data; char *path; GtkWidget *win; gboolean done; } cg_play;
+static void cg__play_free(gpointer p) { cg_play *c = p; g_free(c->path); g_free(c); }
+static void cg__play_error(GObject *stream, GParamSpec *ps, gpointer user) {
+    cg_play *c = user;
+    if (c->done || !gtk_media_stream_get_error(GTK_MEDIA_STREAM(stream))) return;
+    c->done = TRUE;
+    c->fallback(c->path, c->data);          // не играет (кодек) — отдаём системному плееру
+    gtk_window_close(GTK_WINDOW(c->win));
+}
+static inline void cg_play_file(GtkWidget *parent, const char *path, const char *title, gboolean video,
+                                cg_paths_cb fallback, void *data) {
+    GtkMediaStream *stream = gtk_media_file_new_for_filename(path);
+    if (!stream || strcmp(G_OBJECT_TYPE_NAME(stream), "GtkNoMediaFile") == 0) {   // в GTK нет медиа-движка
+        if (stream) g_object_unref(stream);
+        fallback(path, data);
+        return;
+    }
+    GtkWidget *win = gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(win), title);
+    gtk_window_set_transient_for(GTK_WINDOW(win), GTK_WINDOW(parent));
+    gtk_window_set_default_size(GTK_WINDOW(win), video ? 860 : 480, video ? 520 : 120);
+    GtkWidget *v = gtk_video_new_for_media_stream(stream);
+    gtk_video_set_autoplay(GTK_VIDEO(v), TRUE);
+    gtk_window_set_child(GTK_WINDOW(win), v);
+    cg_play *c = g_new0(cg_play, 1);
+    c->fallback = fallback; c->data = data; c->path = g_strdup(path); c->win = win;
+    g_signal_connect_data(stream, "notify::error", G_CALLBACK(cg__play_error), c, (GClosureNotify)cg__play_free, 0);
+    g_object_unref(stream);                  // держит GtkVideo
+    gtk_window_present(GTK_WINDOW(win));
+}
+
 // --- Уведомление внизу окна ---
 static inline GtkWidget *cg_toast_overlay(GtkWidget *child) {
     GtkWidget *o = adw_toast_overlay_new();

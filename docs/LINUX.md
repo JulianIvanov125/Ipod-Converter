@@ -75,6 +75,11 @@ Check with `which -a ipod-converter` and remove the one you don't use.
 4. Press **Convert**. Videos go to `iPod Converter Video/Music Videos | Films | Serials`, music to
    `iPod Converter Music`. Music that already plays on the iPod is copied as is, without re-encoding.
 
+**Play:** ▶ next to a file plays the original in a player window (pause, seek, volume, full screen); after
+conversion **▶ Converted** plays the result — check picture and sound before copying to the iPod. The player uses
+GStreamer: the `.deb` pulls in its codecs; on other distributions install `gstreamer1.0-libav` / `gst-libav`,
+`gst-plugins-good` and `gst-plugins-bad`. Without them the file opens in your system player instead.
+
 **Duplicates:** switch the list to **Duplicates** to see the same video added more than once (also older copies
 like `…_ipod5g_480.m4v`). The best copy stays; pick another one with **Keep this one instead**, move extras to the
 Trash with the trash button. Versions of one video made for different iPods are not counted as duplicates.

@@ -49,13 +49,13 @@ final class LinuxTrack {
 @MainActor
 final class LinuxEngine {
     var model: IPodModel {
-        didSet { UserDefaults.standard.set(model.rawValue, forKey: "linux.model"); Self.save() }
+        didSet { guard persist else { return }; UserDefaults.standard.set(model.rawValue, forKey: "linux.model"); Self.save() }
     }
     var maxQuality: Bool {
-        didSet { UserDefaults.standard.set(maxQuality, forKey: "maxQuality"); Self.save() }
+        didSet { guard persist else { return }; UserDefaults.standard.set(maxQuality, forKey: "maxQuality"); Self.save() }
     }
     var outputRoot: URL {
-        didSet { UserDefaults.standard.set(outputRoot.path, forKey: "rootFolder"); Self.save() }
+        didSet { guard persist else { return }; UserDefaults.standard.set(outputRoot.path, forKey: "rootFolder"); Self.save() }
     }
     private(set) var videos: [LinuxVideo] = []
     private(set) var tracks: [LinuxTrack] = []
@@ -70,7 +70,11 @@ final class LinuxEngine {
     /// Перерисовать интерфейс (вызывается на главном потоке).
     var onChange: (() -> Void)?
 
-    init() {
+    /// Окно запоминает выбор iPod/качества/папки; консольные --ipod/--max/--out — только на этот запуск.
+    private let persist: Bool
+
+    init(persist: Bool = true) {
+        self.persist = persist
         let d = UserDefaults.standard
         model = d.string(forKey: "linux.model").flatMap(IPodModel.init(rawValue:)) ?? .classic55G
         maxQuality = d.object(forKey: "maxQuality") as? Bool ?? false

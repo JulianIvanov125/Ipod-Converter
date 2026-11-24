@@ -68,7 +68,7 @@ enum LinuxMain {
             }
             return 0
         case "convert", "dups":
-            let engine = LinuxEngine()
+            let engine = LinuxEngine(persist: false)   // флаги консоли не меняют настройки окна
             var paths: [URL] = []
             var toITunes = false, trash = false
             var i = 0

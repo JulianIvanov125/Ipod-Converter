@@ -42,7 +42,7 @@ Section: video
 Priority: optional
 Architecture: $DEBARCH
 Depends: ffmpeg, libgtk-4-1 (>= 4.12), libadwaita-1-0 (>= 1.4), libc6 (>= 2.35), libstdc++6, libgcc-s1
-Recommends: rhythmbox | strawberry | gtkpod
+Recommends: libgtk-4-media-gstreamer, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, rhythmbox | strawberry | gtkpod
 Installed-Size: $SIZE
 Maintainer: Julian Ivanov <ivanovulian@gmail.com>
 Homepage: https://github.com/JulianIvanov125/Ipod-Converter
