@@ -150,6 +150,11 @@ enum SeriesParser {
         for m in matches(#"\s[\-–]\s(\d{1,3})(?=\s*(?:\[|\(|$|v\d|[\-–]\s))"#, in: s) {
             if let v = Int(group(m, 1, s)), v < 1900 { return (v, m.range) }
         }
+        // Номер серии в квадратных скобках: «Show [252] [AniLibria TV] [WEBRip 1080p]».
+        // Разрешения вида [720] / [1080] номером не считаем.
+        for m in matches(#"(?<=\S)\s*\[(\d{1,4})\](?!\d)"#, in: s) {
+            if let v = Int(group(m, 1, s)), v < 1900, ![360, 480, 576, 720, 1080].contains(v) { return (v, m.range) }
+        }
         return nil
     }
 

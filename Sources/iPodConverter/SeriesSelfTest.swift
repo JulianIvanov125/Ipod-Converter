@@ -26,6 +26,8 @@ enum SeriesSelfTest {
         ("Серия 12", "Интерны", nil),
         ("E03 The Pilot", "S01", "Mr Robot"),
         ("Mr.Robot.S03E10.1080p", nil, nil),
+        ("Boruto_-_Naruto_Next_Generations_[252]_[AniLibria_TV]_[WEBRip_1080p_HEVC]", "Boruto", nil),
+        ("Boruto_-_Naruto_Next_Generations_[001]_[AniLibria_TV]_[WEBRip_1080p_HEVC]", "Boruto", nil),
         // не сериалы
         ("Inception (2010) 1080p BluRay", nil, nil),
         ("Daft Punk - Get Lucky", nil, nil),
