@@ -129,6 +129,12 @@ final class PlayerController {
     @ObservationIgnored var loadToken = UUID()
     @ObservationIgnored private var prepJob: ConversionJob?
     @ObservationIgnored private var proxies: [URL: URL] = [:]
+    /// Видео, которое идёт потоком (ещё готовится): перемотка перезапускает поток с нужного места.
+    @ObservationIgnored private var streamContext: StreamContext?
+    /// С какой секунды фильма начат текущий поток (время плеера считается от нуля).
+    @ObservationIgnored private var streamOffset: Double = 0
+    /// Папка потока, который сейчас в плеере. Если это не сохранённая полная копия — убираем при смене.
+    @ObservationIgnored private var streamDir: URL?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
     /// Полноэкранный плеер рисуется поверх главного окна (так он работает и когда окно уже
     /// развёрнуто на отдельный рабочий стол).
@@ -146,11 +152,19 @@ final class PlayerController {
         muted = UserDefaults.standard.bool(forKey: "playerMuted")
         player.volume = volume
         player.isMuted = muted
+        // Копии для просмотра от прошлых запусков не нужны (а фильм — это гигабайты): чистим.
+        let previews = PreviewServer.shared.root
+        DispatchQueue.global(qos: .utility).async {
+            for f in (try? FileManager.default.contentsOfDirectory(at: previews, includingPropertiesForKeys: nil)) ?? [] {
+                try? FileManager.default.removeItem(at: f)
+            }
+        }
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] t in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if !self.isScrubbing, t.seconds.isFinite { self.currentTime = t.seconds }
-                if let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0, d != self.duration {
+                if !self.isScrubbing, t.seconds.isFinite { self.currentTime = t.seconds + self.streamOffset }
+                // У потока с середины длительность плеера — только остаток; длину знаем из ffprobe.
+                if self.streamOffset == 0, let d = self.player.currentItem?.duration.seconds, d.isFinite, d > 0, d != self.duration {
                     self.duration = d
                     NowPlaying.update(self)   // длительность стала известна — обновляем полосу в системе
                 }
@@ -171,7 +185,7 @@ final class PlayerController {
     func togglePlay() {
         guard player.currentItem != nil else { return }
         if player.rate > 0 { player.pause() } else {
-            if duration > 0, currentTime >= duration - 0.3 { player.seek(to: .zero) }
+            if duration > 0, currentTime >= duration - 0.3 { seek(to: 0) }
             player.play()
         }
         isPlaying = player.rate > 0
@@ -208,8 +222,39 @@ final class PlayerController {
 
     func seek(to seconds: Double) {
         currentTime = seconds
-        player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        let local = seconds - streamOffset
+        let seekable = player.currentItem?.seekableTimeRanges.contains {
+            let r = $0.timeRangeValue
+            return local >= r.start.seconds && local <= r.end.seconds
+        } ?? false
+        if streamContext != nil, !seekable {
+            restartStream(at: seconds)
+        } else {
+            player.seek(to: CMTime(seconds: local, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        }
         NowPlaying.update(self)
+    }
+
+    /// Перемотка в потоке, который ещё готовится: заново с нужной секунды (переупаковка стартует за доли секунды).
+    private func restartStream(at seconds: Double) {
+        guard let ctx = streamContext, let entry = current else { return }
+        let wasPlaying = isPlaying || player.rate > 0
+        let token = UUID()
+        loadToken = token
+        prepJob?.cancel()
+        prepJob = nil
+        dropStreamDir()
+        let from = max(0, seconds)
+        Task {
+            guard let url = await stream(entry, ffmpeg: ctx.ffmpeg, args: ctx.arguments(from: from),
+                                         into: PreviewServer.shared.root, token: token, cache: from == 0) else {
+                if token == loadToken { error = L.previewFailed }
+                return
+            }
+            guard token == loadToken else { return }
+            streamOffset = from
+            attach(url: url, entry: entry, token: token, play: wasPlaying)
+        }
     }
 
     func skip(_ delta: Double) { seek(to: min(max(currentTime + delta, 0), max(duration, 0))) }
@@ -218,6 +263,7 @@ final class PlayerController {
         loadToken = UUID()
         prepJob?.cancel()
         prepJob = nil
+        dropStreamDir()
         player.pause()
         player.replaceCurrentItem(with: nil)
         entries = []
@@ -241,6 +287,9 @@ final class PlayerController {
         player.replaceCurrentItem(with: nil)
         prepJob?.cancel()
         prepJob = nil
+        dropStreamDir()
+        streamContext = nil
+        streamOffset = 0
         let token = UUID()
         loadToken = token
         let entry = entries[i]
@@ -265,6 +314,12 @@ final class PlayerController {
                 error = error ?? L.previewFailed
                 return
             }
+            attach(url: url, entry: entry, token: token, play: true)
+        }
+    }
+
+    private func attach(url: URL, entry: PlayEntry, token: UUID, play: Bool) {
+        Task {
             let asset = AVURLAsset(url: url)
             let item = AVPlayerItem(asset: asset)
             // Для музыки подключаем анализ спектра (визуализация в полном экране).
@@ -282,15 +337,17 @@ final class PlayerController {
                 }
             }
             player.replaceCurrentItem(with: item)
-            player.play()
-            isPlaying = true
+            if play { player.play() }
+            isPlaying = play
             NowPlaying.update(self)
         }
     }
 
     /// Файл, который умеет AVPlayer: сам оригинал или временная копия, сделанная ffmpeg.
     func playableURL(for e: PlayEntry, token: UUID) async -> URL? {
-        if let p = proxies[e.url], FileManager.default.fileExists(atPath: p.path) { return p }
+        if let p = proxies[e.url], FileManager.default.fileExists(atPath: p.path) {
+            return p.pathExtension == "m3u8" ? await PreviewServer.shared.url(for: p) : p
+        }
         let asset = AVURLAsset(url: e.url)
         if (try? await asset.load(.isPlayable)) == true {
             let hasVideo = ((try? await asset.loadTracks(withMediaType: .video)) ?? []).isEmpty == false
@@ -298,58 +355,122 @@ final class PlayerController {
         }
         guard let ffmpeg = FFmpeg.tool("ffmpeg") else { error = L.toolNotFound("ffmpeg"); return nil }
 
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("iPodConverter/preview", isDirectory: true)
+        let dir = PreviewServer.shared.root
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let out = dir.appendingPathComponent(UUID().uuidString).appendingPathExtension(e.isVideo ? "mp4" : "m4a")
         preparing = 0
 
-        var attempts: [[String]] = []
         if e.isVideo {
             let info = try? await FFmpeg.probe(e.url)
+            duration = info?.duration ?? 0
             let audio = info?.audioStreamIndex.map { ["-map", "0:\($0)"] } ?? ["-map", "0:a:0?"]
             let head = ["-hide_banner", "-nostdin", "-y"] + FFmpeg.decodeArgs(info) + ["-i", e.url.path, "-map", "0:V:0"] + audio + ["-sn", "-dn"]
-            let tail = ["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-movflags", "+faststart", "-f", "mp4",
-                        "-progress", "pipe:1", "-nostats", out.path]
-            // 1) H.264/HEVC — только переупаковка, секунды.
+            var attempts: [[String]] = []
+            // 1) H.264/HEVC — только переупаковка: быстрее, чем читается файл.
             if let codec = info?.videoCodec, codec == "H.264" || codec == "HEVC" {
-                attempts.append(head + ["-c:v", "copy"] + (codec == "HEVC" ? ["-tag:v", "hvc1"] : []) + tail)
+                attempts.append(["-c:v", "copy"] + (codec == "HEVC" ? ["-tag:v", "hvc1"] : []))
             }
             // 2) Остальное — быстрое аппаратное перекодирование до 720p.
             let deint = (info?.interlaced ?? false) ? "yadif," : ""
-            attempts.append(head + ["-vf", "\(deint)scale=-2:'min(720,ih)',format=yuv420p",
-                                    "-c:v", "h264_videotoolbox", "-b:v", "3000k"] + tail)
-            attempts.append(head + ["-vf", "\(deint)scale=-2:'min(720,ih)',format=yuv420p",
-                                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] + tail)
-            duration = info?.duration ?? 0
-        } else {
-            let info = try? await FFmpeg.probeAudio(e.url)
-            attempts.append(["-hide_banner", "-nostdin", "-y", "-i", e.url.path, "-map", "0:a:0", "-vn",
-                             "-c:a", FFmpeg.hasAudioToolboxAAC ? "aac_at" : "aac", "-b:a", "256k", "-ac", "2",
-                             "-f", "ipod", "-progress", "pipe:1", "-nostats", out.path])
-            duration = info?.duration ?? 0
+            attempts.append(["-vf", "\(deint)scale=-2:'min(720,ih)',format=yuv420p", "-c:v", "h264_videotoolbox", "-b:v", "3000k"])
+            attempts.append(["-vf", "\(deint)scale=-2:'min(720,ih)',format=yuv420p", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"])
+            for video in attempts {
+                guard token == loadToken else { return nil }
+                let ctx = StreamContext(ffmpeg: ffmpeg, input: e.url.path, beforeInput: FFmpeg.decodeArgs(info),
+                                        afterInput: Array(head.drop { $0 != "-i" }.dropFirst(2)), video: video)
+                if let url = await stream(e, ffmpeg: ffmpeg, args: ctx.arguments(from: 0), into: dir, token: token, cache: true) {
+                    if token == loadToken { streamContext = ctx }
+                    return url
+                }
+            }
+            return nil
         }
 
+        let out = dir.appendingPathComponent(UUID().uuidString).appendingPathExtension("m4a")
+        let info = try? await FFmpeg.probeAudio(e.url)
+        duration = info?.duration ?? 0
+        let args = ["-hide_banner", "-nostdin", "-y", "-i", e.url.path, "-map", "0:a:0", "-vn",
+                    "-c:a", FFmpeg.hasAudioToolboxAAC ? "aac_at" : "aac", "-b:a", "256k", "-ac", "2",
+                    "-f", "ipod", "-progress", "pipe:1", "-nostats", out.path]
         let total = duration
-        for args in attempts {
-            guard token == loadToken else { return nil }
-            let ok: Bool = await withCheckedContinuation { cont in
-                let job = ConversionJob()
-                prepJob = job
-                do {
-                    try job.start(
-                        ffmpeg: ffmpeg, args: args, duration: total,
-                        progress: { p in Task { @MainActor in if token == self.loadToken { self.preparing = p } } },
-                        completion: { status, _ in cont.resume(returning: status == 0 && !job.cancelled) }
-                    )
-                } catch { cont.resume(returning: false) }
-            }
-            if ok {
-                proxies[e.url] = out
-                return out
-            }
+        let ok: Bool = await withCheckedContinuation { cont in
+            let job = ConversionJob()
+            prepJob = job
+            do {
+                try job.start(
+                    ffmpeg: ffmpeg, args: args, duration: total,
+                    progress: { p in Task { @MainActor in if token == self.loadToken { self.preparing = p } } },
+                    completion: { status, _ in cont.resume(returning: status == 0 && !job.cancelled) }
+                )
+            } catch { cont.resume(returning: false) }
+        }
+        if ok, token == loadToken {
+            proxies[e.url] = out
+            return out
         }
         try? FileManager.default.removeItem(at: out)
         return nil
+    }
+
+    /// Видео для просмотра — потоком HLS: ffmpeg пишет кусочки по несколько секунд, а смотреть можно,
+    /// как только готовы первые два (раньше ждали копию всего фильма — минуты для MKV на 8 ГБ).
+    /// Подготовка продолжается во время просмотра; брошенная — удаляется.
+    private func stream(_ e: PlayEntry, ffmpeg: String, args: [String], into root: URL, token: UUID, cache: Bool) async -> URL? {
+        let dir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let playlist = dir.appendingPathComponent("index.m3u8")
+        let full = args + ["-c:a", "aac", "-b:a", "192k", "-ac", "2",
+                           "-f", "hls", "-hls_time", "4", "-hls_list_size", "0", "-hls_playlist_type", "event",
+                           "-hls_segment_type", "fmp4", "-hls_flags", "independent_segments+temp_file",
+                           "-hls_fmp4_init_filename", "init.mp4",
+                           "-hls_segment_filename", dir.appendingPathComponent("seg%05d.m4s").path,
+                           "-progress", "pipe:1", "-nostats", playlist.path]
+        let job = ConversionJob()
+        prepJob = job
+        let result = StreamResult()
+        let source = e.url
+        do {
+            try job.start(
+                ffmpeg: ffmpeg, args: full, duration: duration,
+                progress: { p in Task { @MainActor in if token == self.loadToken, self.preparing != nil { self.preparing = p } } },
+                completion: { status, _ in
+                    let ok = status == 0 && !job.cancelled
+                    result.finish(ok)
+                    Task { @MainActor in
+                        if ok, cache { self.proxies[source] = playlist }
+                        else if ok, result.handedOut == false { try? FileManager.default.removeItem(at: dir) }
+                        else if result.handedOut { try? FileManager.default.removeItem(at: dir) }
+                    }
+                }
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+        // Ждём первые кусочки (или конец — короткое видео).
+        while true {
+            if token != loadToken { job.cancel(); try? FileManager.default.removeItem(at: dir); return nil }
+            if let ok = result.finished, !ok { try? FileManager.default.removeItem(at: dir); return nil }
+            let text = (try? String(contentsOf: playlist, encoding: .utf8)) ?? ""
+            if result.finished == true || text.components(separatedBy: "#EXTINF").count > 2 { break }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        guard let url = await PreviewServer.shared.url(for: playlist) else {
+            job.cancel()
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+        result.handedOut = true
+        streamDir = dir
+        return url
+    }
+
+    /// Убрать папку прошлого потока (кроме полной копии, которую держим для повторного просмотра).
+    private func dropStreamDir() {
+        guard let dir = streamDir else { return }
+        streamDir = nil
+        if proxies.values.contains(where: { $0.deletingLastPathComponent().standardizedFileURL == dir.standardizedFileURL }) { return }
+        // Процесс ffmpeg может ещё дописывать — удаляем чуть позже, когда он закрылся.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { try? FileManager.default.removeItem(at: dir) }
     }
 
     // MARK: Полный экран
@@ -387,6 +508,35 @@ final class PlayerController {
         weEnteredFullscreen = false
     }
 
+}
+
+/// Как запускать ffmpeg для потока: с начала или с любой секунды (перемотка).
+private struct StreamContext {
+    let ffmpeg: String
+    let input: String
+    let beforeInput: [String]
+    let afterInput: [String]
+    let video: [String]
+
+    func arguments(from seconds: Double) -> [String] {
+        ["-hide_banner", "-nostdin", "-y"] + beforeInput
+            + (seconds > 0 ? ["-ss", String(format: "%.3f", seconds)] : [])
+            + ["-i", input] + afterInput + video
+    }
+}
+
+/// Итог фоновой подготовки потока (пишется из потока ffmpeg, читается на главном).
+private final class StreamResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _finished: Bool?
+    private var _handedOut = false
+    var finished: Bool? { lock.lock(); defer { lock.unlock() }; return _finished }
+    func finish(_ ok: Bool) { lock.lock(); _finished = ok; lock.unlock() }
+    /// Поток уже отдан плееру: если подготовка потом сорвётся/отменится — папку убираем.
+    var handedOut: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _handedOut }
+        set { lock.lock(); _handedOut = newValue; lock.unlock() }
+    }
 }
 
 // MARK: - Видео-поверхность

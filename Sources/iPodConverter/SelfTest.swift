@@ -545,11 +545,34 @@ enum SelfTest {
                     let isVideo = !AudioRules.audioExtensions.contains(f.pathExtension.lowercased())
                     let e = PlayEntry(id: f.path, url: f, title: "", subtitle: "", artwork: nil, isVideo: isVideo)
                     let started = Date()
-                    let url = await pc.playableURL(for: e, token: pc.loadToken)
-                    var playable = false
-                    if let url { playable = (try? await AVURLAsset(url: url).load(.isPlayable)) ?? false }
-                    print("\(f.lastPathComponent): " + (url == nil ? "FAILED" : (url == f ? "напрямую" : "копия .\(url!.pathExtension)"))
-                          + String(format: " за %.1f c", Date().timeIntervalSince(started)) + ", AVPlayer: \(playable ? "играет" : "НЕТ")")
+                    pc.play([e], startAt: 0)
+                    var firstFrame: Double?
+                    for _ in 0..<300 where firstFrame == nil {
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        if pc.currentTime > 0.05 { firstFrame = Date().timeIntervalSince(started) }
+                    }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let t1 = pc.currentTime
+                    let target = (pc.duration * 0.6).rounded()
+                    let seekStart = Date()
+                    pc.seek(to: target)
+                    var seekAt: Double?
+                    for _ in 0..<100 where seekAt == nil {
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        if pc.isPlaying, pc.player.currentTime().seconds > 0.05 || pc.currentTime > target + 0.05 { seekAt = Date().timeIntervalSince(seekStart) }
+                    }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let t2 = pc.currentTime
+                    pc.seek(to: 60)
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let t3 = pc.currentTime
+                    let dirs = (try? FileManager.default.contentsOfDirectory(atPath: PreviewServer.shared.root.path).count) ?? 0
+                    print("\(f.lastPathComponent): первый кадр " + (firstFrame.map { String(format: "%.1f c", $0) } ?? "НЕТ")
+                          + String(format: ", через 3 с t=%.1f · перемотка на %.0f: пошло за %@, через 3 с t=%.1f · назад на 60 → t=%.1f",
+                                   t1, target, seekAt.map { String(format: "%.1f c", $0) } ?? "НЕТ", t2, t3)
+                          + " · длительность \(Int(pc.duration)) c, ошибка \(pc.error ?? "-"), папок во временной \(dirs)")
+                    pc.close()
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
                 }
                 exit(0)
             }
