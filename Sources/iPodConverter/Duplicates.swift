@@ -204,15 +204,18 @@ extension DuplicateFinder {
     }
 
     /// Чем лучше копия, тем больше: больше картинка, современнее кодек, выше битрейт, больше файл.
-    @MainActor static func videoQuality(_ v: some VideoDupItem) -> (Int, Int, Int, Int64) {
-        guard let i = v.info else { return (0, 0, 0, 0) }
+    /// При равном качестве — файл без наших пометок в имени («_ipod5g_480», «[iPod …]»): это оригинал, а не старая копия.
+    @MainActor static func videoQuality(_ v: some VideoDupItem) -> (Int, Int, Int, Int64, Int) {
+        guard let i = v.info else { return (0, 0, 0, 0, 0) }
+        let name = v.url.deletingPathExtension().lastPathComponent
+        let marked = name.range(of: #"(?i)_ipod[a-z0-9_.]*|\[\s*ipod[^\]]*\]"#, options: .regularExpression) != nil
         let codec: Int
         switch i.videoCodec.lowercased() {
         case "hevc", "h265", "av1", "vp9": codec = 3
         case "h264": codec = 2
         default: codec = 1
         }
-        return (i.displayWidth * i.displayHeight, codec, i.videoBitrate ?? 0, i.fileSize)
+        return (i.displayWidth * i.displayHeight, codec, i.videoBitrate ?? 0, i.fileSize, marked ? 0 : 1)
     }
 
     /// Группы дублей видео: тот же ключ и длительность отличается не больше чем на 2 с.

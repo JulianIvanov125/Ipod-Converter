@@ -250,21 +250,31 @@ enum FFmpeg {
     static func preparePeakSafeAudio(input: URL, info: MediaInfo, settings model: EncodeSettings, workDir: URL) async -> URL? {
         guard info.hasAudio, let ffmpeg = tool("ffmpeg") else { return nil }
         try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        let out = workDir.appendingPathComponent("audio-\(UUID().uuidString).m4a")
+        let id = UUID().uuidString
         let map = info.audioStreamIndex.map { "0:\($0)" } ?? "0:a:0"
+        // Перегруз встроенного AAC нелинейный (на громком шуме −4 дБ громкости могло дать +1 дБ пика, а −8 дБ — −2,4),
+        // поэтому до 5 попыток с шагом не меньше 2 дБ; если ни одна не уложилась — берём попытку с самым низким пиком.
         var gain = 0.0
-        for _ in 0..<3 {
+        var best: (url: URL, peak: Double)?
+        for n in 0..<5 {
+            let out = workDir.appendingPathComponent("audio-\(id)-\(n).m4a")
             let filter = (gain < 0 ? String(format: "volume=%.2fdB,", gain) : "") + "alimiter=limit=0.891:level=false"
             let r = try? await ProcessRunner.run(ffmpeg, ["-hide_banner", "-nostdin", "-y", "-i", input.path, "-map", map,
                                                          "-vn", "-sn", "-af", filter, "-c:a", "aac",
                                                          "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)",
                                                          "-ac", "2", out.path], timeout: 1800)
-            guard r?.status == 0, let peak = await peakDB(out) else { try? FileManager.default.removeItem(at: out); return nil }
+            guard r?.status == 0, let peak = await peakDB(out) else { try? FileManager.default.removeItem(at: out); break }
+            if best == nil || peak < best!.peak {
+                if let old = best?.url { try? FileManager.default.removeItem(at: old) }
+                best = (out, peak)
+            } else {
+                try? FileManager.default.removeItem(at: out)
+            }
             // Запас 0,6 дБ: после вставки в видео пик может сдвинуться на пару десятых (проверено на клипах).
-            if peak <= -0.6 { return out }
-            gain -= peak + 1.0
+            if peak <= -0.6 { break }
+            gain -= max(2.0, peak + 1.5)
         }
-        return out   // после трёх попыток — лучшее, что есть (запас уже большой)
+        return best?.url
     }
 
     /// Теги iTunes: тип (stik), шоу/сезон/серия для сериалов, артист для клипов, год для фильмов.
