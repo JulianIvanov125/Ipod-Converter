@@ -74,6 +74,11 @@
                         <MenuFlyoutItem x:Name="ClearItem" Click="Clear_Click">
                             <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE74D;" /></MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="CheckUpdatesItem" Click="CheckUpdates_Click">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE895;" /></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="VersionItem" IsEnabled="False" />
                     </MenuFlyout>
                 </DropDownButton.Flyout>
             </DropDownButton>
@@ -186,6 +191,21 @@
             </StackPanel>
         </Grid>
 
-        <InfoBar x:Name="Info" Grid.Row="4" Margin="12,0,12,12" IsOpen="False" />
+        <StackPanel Grid.Row="4" Margin="12,0,12,12" Spacing="8">
+            <!-- Новая версия: обновить в один клик (установка через Setup) или скачать (zip) -->
+            <InfoBar x:Name="UpdateBar" IsOpen="False" Severity="Informational">
+                <InfoBar.ActionButton>
+                    <Button x:Name="UpdateButton" Click="Update_Click" Style="{StaticResource AccentButtonStyle}" />
+                </InfoBar.ActionButton>
+                <StackPanel Spacing="6" Margin="0,0,0,12">
+                    <ProgressBar x:Name="UpdateProgress" Maximum="1" Visibility="Collapsed" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <HyperlinkButton x:Name="WhatsNewLink" Click="WhatsNew_Click" Padding="0" />
+                        <HyperlinkButton x:Name="SkipLink" Click="Skip_Click" Padding="12,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </InfoBar>
+            <InfoBar x:Name="Info" IsOpen="False" />
+        </StackPanel>
     </Grid>
 </Window>

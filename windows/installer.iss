@@ -64,6 +64,8 @@ Name: "{autodesktop}\iPod Converter"; Filename: "{app}\iPod Converter.exe"; Task
 
 [Run]
 Filename: "{app}\iPod Converter.exe"; Description: "{cm:LaunchProgram,iPod Converter}"; Flags: nowait postinstall skipifsilent
+; Обновление из приложения (тихо, с /RELAUNCH=1): открыть новую версию от имени пользователя, не администратора.
+Filename: "{app}\iPod Converter.exe"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
 
 [Code]
 // Удаление само окно не закрывает: открытая программа держит DLL, и папка в Program Files оставалась.
@@ -92,4 +94,16 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then CloseApp;
+end;
+
+function ShouldRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
+// Тихое обновление из приложения: окно в этот момент закрывается само — дожидаемся, чтобы файлы не были заняты.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  if WizardSilent then CloseApp;
+  Result := '';
 end;

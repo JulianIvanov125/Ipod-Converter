@@ -61,5 +61,26 @@ public static class Strings
         "Гатовыя файлы — у тэчцы вываду: дадайце іх у iTunes і сінхранізуйце iPod.");
     public static string Summary(int music, int videos) => T($"{music} tracks · {videos} videos", $"Треков: {music} · видео: {videos}",
         $"Треків: {music} · відео: {videos}", $"Трэкаў: {music} · відэа: {videos}");
+    public static string CheckUpdates => T("Check for Updates…", "Проверить обновления…", "Перевірити оновлення…", "Праверыць абнаўленні…");
+    public static string AboutVersion(string v) => T($"iPod Converter {v}", $"iPod Converter {v}", $"iPod Converter {v}", $"iPod Converter {v}");
+    public static string UpdateAvailable(string v) => T($"iPod Converter {v} is available", $"Доступна версия {v}", $"Доступна версія {v}", $"Даступная версія {v}");
+    public static string YouHave(string v) => T($"You have {v}.", $"У вас {v}.", $"У вас {v}.", $"У вас {v}.");
+    public static string UpdateRestart => T("Update and Restart", "Обновить и перезапустить", "Оновити й перезапустити", "Абнавіць і перазапусціць");
+    public static string Download => T("Download", "Скачать", "Завантажити", "Спампаваць");
+    public static string WhatsNew => T("What's new", "Что нового", "Що нового", "Што новага");
+    public static string SkipVersion => T("Skip this version", "Пропустить эту версию", "Пропустити цю версію", "Прапусціць гэту версію");
+    public static string ZipUpdateHint => T("This copy runs from a zip: download the new version from the release page (or use the Setup to get updates in one click).",
+        "Эта копия запущена из zip: скачайте новую версию со страницы релиза (или поставьте через Setup — тогда обновление в один клик).",
+        "Ця копія запущена із zip: завантажте нову версію зі сторінки релізу (або встановіть через Setup — тоді оновлення в один клік).",
+        "Гэтая копія запушчана з zip: спампуйце новую версію са старонкі рэлізу (або ўсталюйце праз Setup — тады абнаўленне ў адзін клік).");
+    public static string UpToDate(string v) => T($"You have the latest version ({v})", $"У вас последняя версия ({v})", $"У вас остання версія ({v})", $"У вас апошняя версія ({v})");
+    public static string UpdateCheckFailed => T("Couldn't check for updates", "Не удалось проверить обновления", "Не вдалося перевірити оновлення", "Не ўдалося праверыць абнаўленні");
+    public static string Downloading => T("Downloading the update…", "Скачиваю обновление…", "Завантажую оновлення…", "Спампоўваю абнаўленне…");
+    public static string UpdateFailed => T("Update failed", "Не удалось обновить", "Не вдалося оновити", "Не ўдалося абнавіць");
+    public static string StopFirst => T("Stop the conversion first", "Сначала остановите конвертацию", "Спочатку зупиніть конвертацію", "Спачатку спыніце канвертацыю");
+    public static string UacDeclined => T("The update needs permission to install. Try again and click Yes.",
+        "Для установки нужно разрешение Windows. Попробуйте ещё раз и нажмите «Да».",
+        "Для встановлення потрібен дозвіл Windows. Спробуйте ще раз і натисніть «Так».",
+        "Для ўсталёўкі патрэбны дазвол Windows. Паспрабуйце яшчэ раз і націсніце «Так».");
     public static string ChooseFiles => T("Choose music and videos", "Выберите музыку и видео", "Виберіть музику та відео", "Выберыце музыку і відэа");
 }

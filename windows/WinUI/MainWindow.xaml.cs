@@ -48,6 +48,10 @@ public sealed partial class MainWindow : Window
         ChooseOutputItem.Text = Strings.ChangeOutput;
         OpenOutputItem.Text = Strings.OpenOutput;
         ClearItem.Text = Strings.Clear;
+        CheckUpdatesItem.Text = Strings.CheckUpdates;
+        VersionItem.Text = Strings.AboutVersion(Updater.CurrentText);
+        WhatsNewLink.Content = Strings.WhatsNew;
+        SkipLink.Content = Strings.SkipVersion;
         TabAll.Text = Strings.All;
         TabMusic.Text = Strings.Music;
         TabVideos.Text = Strings.Videos;
@@ -72,6 +76,90 @@ public sealed partial class MainWindow : Window
             return;
         }
         if (startupFiles.Length > 0) _engine.Add(startupFiles);
+        // Как на Mac: сама проверяет обновления не чаще раза в 20 часов.
+        if (Updater.AutoCheckDue) _ = CheckForUpdates(manual: false);
+    }
+
+    // MARK: обновления
+
+    private Updater.Release? _release;
+    private CancellationTokenSource? _download;
+
+    private async Task CheckForUpdates(bool manual)
+    {
+        try
+        {
+            var r = await Updater.FetchLatestAsync();
+            Updater.SaveState();
+            if (r.Version <= Updater.Current)
+            {
+                if (manual) ShowInfo(Strings.UpToDate(Updater.CurrentText), "", InfoBarSeverity.Success);
+                return;
+            }
+            if (!manual && Updater.SkippedVersion == Updater.Format(r.Version)) return;
+            _release = r;
+            var oneClick = Updater.CanInstall(r);
+            UpdateBar.Title = Strings.UpdateAvailable(Updater.Format(r.Version));
+            UpdateBar.Message = Strings.YouHave(Updater.CurrentText) + (oneClick ? "" : " " + Strings.ZipUpdateHint);
+            UpdateButton.Content = oneClick ? Strings.UpdateRestart : Strings.Download;
+            UpdateButton.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+            UpdateBar.Severity = InfoBarSeverity.Informational;
+            UpdateBar.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            if (manual) ShowInfo(Strings.UpdateCheckFailed, ex.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private void CheckUpdates_Click(object sender, RoutedEventArgs e) => _ = CheckForUpdates(manual: true);
+
+    private void WhatsNew_Click(object sender, RoutedEventArgs e)
+    {
+        if (_release != null) Updater.OpenPage(_release.Page);
+    }
+
+    private void Skip_Click(object sender, RoutedEventArgs e)
+    {
+        if (_release != null) Updater.SaveState(skip: Updater.Format(_release.Version));
+        UpdateBar.IsOpen = false;
+    }
+
+    private async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        var r = _release;
+        if (r == null) return;
+        if (!Updater.CanInstall(r)) { Updater.OpenPage(r.Page); return; }
+        if (_running) { ShowInfo(Strings.StopFirst, "", InfoBarSeverity.Warning); return; }
+        UpdateButton.IsEnabled = false;
+        UpdateBar.Message = Strings.Downloading;
+        UpdateProgress.Value = 0;
+        UpdateProgress.Visibility = Visibility.Visible;
+        _download = new CancellationTokenSource();
+        try
+        {
+            var progress = new Progress<double>(p => UpdateProgress.Value = p);
+            var setup = await Updater.DownloadAsync(r, progress, _download.Token);
+            if (!Updater.StartInstaller(setup))
+            {
+                UpdateBar.Message = Strings.UacDeclined;
+                UpdateButton.IsEnabled = true;
+                UpdateProgress.Visibility = Visibility.Collapsed;
+                return;
+            }
+            // Установщик ждёт, пока окно закроется, ставит новую версию и открывает её сам.
+            Close();
+            Application.Current.Exit();
+        }
+        catch (Exception ex)
+        {
+            UpdateBar.Severity = InfoBarSeverity.Error;
+            UpdateBar.Title = Strings.UpdateFailed;
+            UpdateBar.Message = ex.Message;
+            UpdateButton.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+        }
     }
 
     // MARK: состояние от движка
