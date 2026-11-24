@@ -260,7 +260,7 @@ final class LinuxEngine {
         running = false
         current = nil
         onChange?()
-        AppLog.info("Linux batch for \(model.rawValue): \(done) done, \(failed) failed")
+        AppLog.info("Batch for \(model.rawValue): \(done) done, \(failed) failed")
         return (done, failed)
     }
 

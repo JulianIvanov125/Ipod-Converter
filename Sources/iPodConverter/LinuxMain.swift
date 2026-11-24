@@ -3,7 +3,8 @@ import Foundation
 
 /// Точка входа Linux-версии. Без аргументов — окно (GTK); с командой — консольный режим:
 ///   iPodConverter convert --ipod nano7 [--max] [--out ПАПКА] файлы-или-папки…
-///   iPodConverter dups файлы-или-папки…
+///   iPodConverter dups [--trash] файлы-или-папки…   (--trash — лишние копии в Корзину)
+///   convert … --itunes — на Windows добавить готовые файлы в iTunes и в плейлист iPod
 ///   iPodConverter models
 @main
 enum LinuxMain {
@@ -45,6 +46,7 @@ enum LinuxMain {
         case "convert", "dups":
             let engine = LinuxEngine()
             var paths: [URL] = []
+            var toITunes = false, trash = false
             var i = 0
             while i < rest.count {
                 switch rest[i] {
@@ -56,6 +58,8 @@ enum LinuxMain {
                     engine.model = m
                 case "--max": engine.maxQuality = true
                 case "--standard": engine.maxQuality = false
+                case "--itunes": toITunes = true
+                case "--trash": trash = true
                 case "--out":
                     i += 1
                     guard i < rest.count else { return 2 }
@@ -65,10 +69,14 @@ enum LinuxMain {
                 i += 1
             }
             guard !paths.isEmpty else { print("No files given"); return 2 }
+            let missing = paths.filter { !FileManager.default.fileExists(atPath: $0.path) }
+            for m in missing { print("✗ Not found: \(m.path)") }
             engine.add(paths)
             while engine.videos.contains(where: { $0.state == .loading }) || engine.tracks.contains(where: { $0.state == .loading }) {
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
+            // Ничего не нашлось (неверный путь, пустая папка) — это ошибка, а не «всё готово».
+            guard !engine.videos.isEmpty || !engine.tracks.isEmpty else { print("No audio or video files found"); return 2 }
             if cmd == "dups" {
                 let groups = engine.videoDuplicateGroups
                 print("videos: \(engine.videos.count), duplicate groups: \(groups.count)")
@@ -78,6 +86,12 @@ enum LinuxMain {
                         let i = v.info!
                         print("   \(v.id == g.keeper.id ? "KEEP" : "copy") \(i.displayWidth)×\(i.displayHeight) \(i.videoCodec) — \(v.url.lastPathComponent)")
                     }
+                }
+                if trash {
+                    let r = engine.trashDuplicates(groups.flatMap(\.extras))
+                    print("moved to Trash: \(r.moved)")
+                    for f in r.failed { print("✗ \(f)") }
+                    return r.failed.isEmpty ? 0 : 1
                 }
                 return 0
             }
@@ -92,11 +106,39 @@ enum LinuxMain {
                 if case .failed = $0 { return true } else { return false }
             }.count
             print("done: \(r.done), failed: \(max(r.failed, failed))")
-            return max(r.failed, failed) == 0 ? 0 : 1
+            var syncFailed = 0
+            if toITunes { syncFailed = await addToITunes(engine) }
+            return max(r.failed, failed) + syncFailed == 0 ? 0 : 1
         default:
             print("Commands: convert, dups, models")
             return 2
         }
+    }
+
+    /// Готовые файлы — в медиатеку iTunes и в плейлист iPod (как «Музыка» на Mac). Возвращает число ошибок.
+    @MainActor
+    static func addToITunes(_ engine: LinuxEngine) async -> Int {
+        #if os(Windows)
+        guard ITunesBridge.isInstalled else { print("iTunes is not installed"); return 1 }
+        func out(_ s: LinuxItemState) -> URL? {
+            switch s { case .done(let u), .kept(let u): u; default: nil }
+        }
+        let songs = engine.tracks.compactMap { out($0.state) }
+        let clips = engine.videos.filter { $0.meta?.category == .musicVideo }.compactMap { out($0.state) }
+        let other = engine.videos.filter { $0.meta?.category != .musicVideo }.compactMap { out($0.state) }
+        let playlist = engine.model.playlistName
+        var bad = 0
+        for (files, video) in [(songs, false), (clips, true), (other, false)] where !files.isEmpty {
+            let res = await ITunesBridge.add(files, playlist: playlist, musicVideo: video)
+            for (f, r) in zip(files, res + Array(repeating: "ERR:no answer", count: max(0, files.count - res.count))) {
+                if r == "ok" { print("♫ iTunes: \(f.lastPathComponent) → \(playlist)") } else { print("✗ iTunes: \(f.lastPathComponent): \(r)"); bad += 1 }
+            }
+        }
+        return bad
+        #else
+        print("--itunes works only on Windows")
+        return 1
+        #endif
     }
 
     static func line(_ url: URL, _ s: LinuxItemState) -> String {
