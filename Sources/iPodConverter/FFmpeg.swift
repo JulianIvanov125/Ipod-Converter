@@ -239,8 +239,9 @@ enum FFmpeg {
                                                          "-b:a", "\(model.audioKbps)k", "-ar", "\(model.audioRate)",
                                                          "-ac", "2", out.path], timeout: 1800)
             guard r?.status == 0, let peak = await peakDB(out) else { try? FileManager.default.removeItem(at: out); return nil }
-            if peak <= -0.1 { return out }
-            gain -= peak + 0.5
+            // Запас 0,6 дБ: после вставки в видео пик может сдвинуться на пару десятых (проверено на клипах).
+            if peak <= -0.6 { return out }
+            gain -= peak + 1.0
         }
         return out   // после трёх попыток — лучшее, что есть (запас уже большой)
     }

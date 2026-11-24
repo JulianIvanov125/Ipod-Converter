@@ -46,13 +46,13 @@ final class LinuxTrack {
 @MainActor
 final class LinuxEngine {
     var model: IPodModel {
-        didSet { UserDefaults.standard.set(model.rawValue, forKey: "linux.model") }
+        didSet { UserDefaults.standard.set(model.rawValue, forKey: "linux.model"); Self.save() }
     }
     var maxQuality: Bool {
-        didSet { UserDefaults.standard.set(maxQuality, forKey: "maxQuality") }
+        didSet { UserDefaults.standard.set(maxQuality, forKey: "maxQuality"); Self.save() }
     }
     var outputRoot: URL {
-        didSet { UserDefaults.standard.set(outputRoot.path, forKey: "rootFolder") }
+        didSet { UserDefaults.standard.set(outputRoot.path, forKey: "rootFolder"); Self.save() }
     }
     private(set) var videos: [LinuxVideo] = []
     private(set) var tracks: [LinuxTrack] = []
@@ -60,6 +60,9 @@ final class LinuxEngine {
     private(set) var running = false
     private var cancelRequested = false
     private var current: ConversionJob?
+
+    /// На Linux UserDefaults пишутся на диск не сами по себе — сохраняем сразу (иначе выбор iPod терялся).
+    nonisolated static func save() { UserDefaults.standard.synchronize() }
 
     /// Перерисовать интерфейс (вызывается на главном потоке).
     var onChange: (() -> Void)?

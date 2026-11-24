@@ -18,6 +18,7 @@ enum LinuxMain {
         Task { @MainActor in
             let code = await runCommand(cmd, Array(args.dropFirst()))
             _ = AppLog.tail(0)   // дождаться записи журнала
+            LinuxEngine.save()
             exit(code)
         }
         dispatchMain()

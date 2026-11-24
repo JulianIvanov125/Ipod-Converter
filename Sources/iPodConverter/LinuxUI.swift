@@ -91,6 +91,8 @@ final class LinuxWindow {
     private var rowStatus: [UUID: Widget] = [:]
     private var rowProgress: [UUID: Widget] = [:]
     private var refreshScheduled = false
+    /// Список качества меняем сами — его «выбор изменился» не считать выбором пользователя.
+    private var updatingQuality = false
 
     func run() {
         app = cg_app_new("io.github.ipodconverter.linux")
@@ -107,7 +109,7 @@ final class LinuxWindow {
 
     private func build() {
         window = cg_window(app, "iPod Converter", 980, 700)
-        cg_on_close(window, runPlain, Callbacks.id { exit(0) })
+        cg_on_close(window, runPlain, Callbacks.id { LinuxEngine.save(); exit(0) })
 
         let tv = cg_toolbar_view()!
         let header = cg_header()!
@@ -140,6 +142,7 @@ final class LinuxWindow {
         cg_append(bar, ipodDrop)
         qualityDrop = cg_dropdown(nil)
         cg_on3(qualityDrop, "notify::selected", runPlain, Callbacks.id { [unowned self] in
+            guard !self.updatingQuality else { return }
             let maxOn = cg_dropdown_get(self.qualityDrop) == 1
             if self.engine.model.supportsMax && self.engine.maxQuality != maxOn {
                 self.engine.maxQuality = maxOn
@@ -257,8 +260,10 @@ final class LinuxWindow {
         let st = m.settings(max: false), mx = m.settings(max: true)
         var items = ["\(L.standard) · \(st.w)×\(st.h)"]
         if m.supportsMax { items.append("\(L.maximum) · \(mx.w)×\(mx.h)") }
+        updatingQuality = true
         _ = strings(items) { cg_dropdown_items(qualityDrop, $0); return nil }
         cg_dropdown_set(qualityDrop, m.supportsMax && engine.maxQuality ? 1 : 0)
+        updatingQuality = false
         cg_sensitive(qualityDrop, m.supportsMax ? 1 : 0)
         let s = engine.settings
         cg_label_set(qualityHint, "H.264 \(s.profileName) · \(Fmt.kbps(s.videoKbps))")
