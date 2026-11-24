@@ -28,6 +28,9 @@ enum SeriesSelfTest {
         ("Mr.Robot.S03E10.1080p", nil, nil),
         ("Boruto_-_Naruto_Next_Generations_[252]_[AniLibria_TV]_[WEBRip_1080p_HEVC]", "Boruto", nil),
         ("Boruto_-_Naruto_Next_Generations_[001]_[AniLibria_TV]_[WEBRip_1080p_HEVC]", "Boruto", nil),
+        ("[AniDub]_Naruto_Shippuuden_-_101-102_[1280x720_h264]_[Ancord_&_Noir]", nil, nil),
+        ("[AniDub]_Naruto_Shippuuden_-_119-120_[Kakashi_Gaiden]_[1280x720_h264]_[Ancord_&_Noir]", nil, nil),
+        ("[AniDub]_Naruto_Shippuuden_-_248_[1280_720_h264_AAC]_[Ancord]", nil, nil),
         // не сериалы
         ("Inception (2010) 1080p BluRay", nil, nil),
         ("Daft Punk - Get Lucky", nil, nil),

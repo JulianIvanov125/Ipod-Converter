@@ -92,6 +92,8 @@ enum SeriesParser {
         if show.isEmpty { show = "Unknown" }
 
         var tail = ns.substring(from: min(lastEnd, ns.length))
+        // Сначала — скобки целиком («[1280x720 h264]»), иначе обрезка по «h264» оставит «1280x720».
+        tail = tail.replacingOccurrences(of: #"\[[^\]]*\]|\{[^}]*\}"#, with: " ", options: .regularExpression)
         if let junkStart = tail.range(of: junk, options: .regularExpression) {
             tail = String(tail[..<junkStart.lowerBound])
         }
@@ -146,8 +148,9 @@ enum SeriesParser {
                 return (e, NSRange(location: loc, length: m.range.length))
             }
         }
-        // Аниме-стиль «Show - 05 [1080p]» / «Show - 05 - Title» / «Show - 05v2».
-        for m in matches(#"\s[\-–]\s(\d{1,3})(?=\s*(?:\[|\(|$|v\d|[\-–]\s))"#, in: s) {
+        // Аниме-стиль «Show - 05 [1080p]» / «Show - 05 - Title» / «Show - 05v2»;
+        // двойная серия «Show - 101-102 [720p]» — номер по первой.
+        for m in matches(#"\s[\-–]\s(\d{1,3})(?:[\-–]\d{1,3}(?!\d))?(?=\s*(?:\[|\(|$|v\d|[\-–]\s))"#, in: s) {
             if let v = Int(group(m, 1, s)), v < 1900 { return (v, m.range) }
         }
         // Номер серии в квадратных скобках: «Show [252] [AniLibria TV] [WEBRip 1080p]».
