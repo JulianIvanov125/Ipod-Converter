@@ -608,12 +608,13 @@ struct TrackRow: View {
                 }
                 .frame(width: Col.type, alignment: .leading)
 
-                Text(info.bitrate.map { "\($0 / 1000) \(L.kbps)" } ?? "—")
-                    .font(.system(size: 12).monospacedDigit())
+                // После конвертации — «было →» мелко сверху, а крупно — что получилось в готовом файле.
+                let out = track.outputInfo
+                beforeAfter(info.bitrate.map { "\($0 / 1000)" }, out.map { o in o.bitrate.map { "\($0 / 1000)" } ?? "—" },
+                            unit: L.kbps, plain: info.bitrate.map { "\($0 / 1000) \(L.kbps)" } ?? "—")
                     .frame(width: Col.bitrate, alignment: .trailing)
 
-                Text(Fmt.bytes(info.fileSize))
-                    .font(.system(size: 12).monospacedDigit())
+                beforeAfter(Fmt.bytes(info.fileSize), out.map { Fmt.bytes($0.fileSize) }, unit: nil, plain: Fmt.bytes(info.fileSize))
                     .frame(width: Col.size, alignment: .trailing)
 
                 stars.frame(width: Col.rating, alignment: .leading)
@@ -652,6 +653,26 @@ struct TrackRow: View {
             Button(L.cancel, role: .cancel) {}
         } message: {
             Text(L.trackRemoveWhileConverting)
+        }
+    }
+
+    /// Значение колонки: до конвертации — как есть; после — «955 →» мелко и «256 кбит/с» крупно.
+    @ViewBuilder
+    private func beforeAfter(_ before: String?, _ after: String?, unit: String?, plain: String) -> some View {
+        if let after, let before, after != before {
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("\(before) →")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Text(unit.map { "\(after) \($0)" } ?? after)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.accentColor)
+            }
+            .lineLimit(1)
+            .help(L.beforeAfterHelp)
+        } else {
+            Text(plain)
+                .font(.system(size: 12).monospacedDigit())
         }
     }
 

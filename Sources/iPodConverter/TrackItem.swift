@@ -46,6 +46,19 @@ final class TrackItem: Identifiable {
     /// Своё состояние для каждого iPod: в очереди / идёт / готово / ошибка.
     private var perModel: [IPodModel: State] = [:]
     private var musicErrorBy: [IPodModel: String] = [:]
+    /// Параметры готового файла (битрейт, размер) — перечитываются после конвертации, для «было → стало».
+    private var outputInfoBy: [IPodModel: AudioInfo] = [:]
+    /// Готовый файл для iPod открытой вкладки (если он уже есть и прочитан).
+    var outputInfo: AudioInfo? {
+        guard let m = viewModel, case .done? = perModel[m] else { return nil }
+        return outputInfoBy[m]
+    }
+    /// Перечитать готовый файл, чтобы показать его настоящий битрейт и размер.
+    func loadOutputInfo(_ file: URL, for model: IPodModel) {
+        Task {
+            if let i = try? await FFmpeg.probeAudio(file) { outputInfoBy[model] = i }
+        }
+    }
     var state: State { viewModel.flatMap { perModel[$0] } ?? base }
     func state(for m: IPodModel) -> State? { perModel[m] }
     func setState(_ s: State?, for m: IPodModel) { perModel[m] = s }
@@ -208,6 +221,7 @@ final class TrackItem: Identifiable {
                             completion(nil)
                         } else if status == 0 {
                             self.perModel[model] = .done(output)
+                            self.loadOutputInfo(output, for: model)
                             completion(output)
                         } else {
                             try? FileManager.default.removeItem(at: output)
@@ -272,6 +286,7 @@ final class TrackItem: Identifiable {
                     completion(nil)
                 } else {
                     self.perModel[model] = .done(dest)
+                    self.loadOutputInfo(dest, for: model)
                     completion(dest)
                 }
             }

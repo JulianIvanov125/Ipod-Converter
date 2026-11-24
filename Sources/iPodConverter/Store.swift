@@ -40,6 +40,9 @@ final class VideoItem: Identifiable {
     private var perModel: [IPodModel: State] = [:]
     private var settingsBy: [IPodModel: EncodeSettings] = [:]
     private var bytesBy: [IPodModel: Int64] = [:]
+    /// Готовый файл перечитанный (разрешение, кодек, битрейт, звук) — колонка «После» показывает факт, а не план.
+    private var outInfoBy: [IPodModel: MediaInfo] = [:]
+    var outputInfo: MediaInfo? { viewModel.flatMap { outInfoBy[$0] } }
     private var musicBy: [IPodModel: (text: String, ok: Bool)] = [:]
 
     /// Состояние для открытой вкладки (если для этого iPod ничего не делали — общее «готово»).
@@ -145,6 +148,7 @@ final class VideoItem: Identifiable {
         self.job = job
         settingsBy[model] = settings
         bytesBy[model] = nil
+        outInfoBy[model] = nil
         musicBy[model] = nil
         self.addToMusic = addToMusic
         perModel[model] = .converting(0)
@@ -180,6 +184,7 @@ final class VideoItem: Identifiable {
         }
         if status == 0 {
             bytesBy[model] = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) }
+            Task { if let i = try? await FFmpeg.probe(output) { self.outInfoBy[model] = i } }
             perModel[model] = .done(output)
             guard addToMusic else {
                 self.notify(

@@ -289,22 +289,33 @@ final class LinuxWindow {
         let state: LinuxItemState
         let cover: URL?
         let isVideo: Bool
+        /// «было → стало» после конвертации (битрейт, размер; у видео ещё разрешение).
+        var change: String = ""
         var dup: (keeper: Bool, groupStart: Bool)?
         /// Меняется — строку надо перестроить (прочитали файл, появилась обложка, сменилась роль дубля).
-        var key: String { "\(id)|\(title)|\(detail)|\(cover?.path ?? "")|\(dup.map { "\($0.keeper)" } ?? "")|\(state.isBusy)" }
+        var key: String { "\(id)|\(title)|\(detail)|\(change)|\(cover?.path ?? "")|\(dup.map { "\($0.keeper)" } ?? "")|\(state.isBusy)" }
     }
 
     private func rows() -> [Row] {
         switch scope {
         case .all:
             let ts = engine.tracks.map { t in
-                Row(id: t.id, title: t.info?.title.map { "\(t.info?.artist ?? "") — \($0)" } ?? t.url.lastPathComponent,
+                var r = Row(id: t.id, title: t.info?.title.map { "\(t.info?.artist ?? "") — \($0)" } ?? t.url.lastPathComponent,
                     detail: t.info.map { "\($0.codec.uppercased()) · \($0.sampleRate / 1000) kHz · \(Fmt.duration($0.duration))" } ?? "",
                     state: t.state, cover: nil, isVideo: false)
+                if let a = t.info, let b = t.outInfo {
+                    r.change = Self.change(a.bitrate, b.bitrate, a.fileSize, b.fileSize)
+                }
+                return r
             }
             let vs = engine.videos.map { v in
-                Row(id: v.id, title: v.meta.map { $0.artist.isEmpty ? $0.title : "\($0.artist) — \($0.title)" } ?? v.url.lastPathComponent,
+                var r = Row(id: v.id, title: v.meta.map { $0.artist.isEmpty ? $0.title : "\($0.artist) — \($0.title)" } ?? v.url.lastPathComponent,
                     detail: videoDetail(v), state: v.state, cover: v.cover, isVideo: true)
+                if let a = v.info, let b = v.outInfo {
+                    r.change = "\(a.displayWidth)×\(a.displayHeight) → \(b.displayWidth)×\(b.displayHeight) · "
+                        + Self.change(a.videoBitrate, b.videoBitrate, a.fileSize, b.fileSize)
+                }
+                return r
             }
             return ts + vs
         case .duplicates:
@@ -319,6 +330,14 @@ final class LinuxWindow {
             }
             return out
         }
+    }
+
+    /// «926 → 256 кбит/с · 24,6 → 6,8 МБ».
+    static func change(_ br0: Int?, _ br1: Int?, _ s0: Int64, _ s1: Int64) -> String {
+        var parts: [String] = []
+        if let a = br0, let b = br1 { parts.append("\(a / 1000) → \(b / 1000) \(L.kbps)") }
+        parts.append("\(Fmt.bytes(s0)) → \(Fmt.bytes(s1))")
+        return parts.joined(separator: " · ")
     }
 
     private func videoDetail(_ v: LinuxVideo) -> String {
@@ -425,7 +444,7 @@ final class LinuxWindow {
             cg_css_class(detail, "dim-label")
             cg_css_class(detail, "caption")
             cg_append(text, detail)
-            let st = cg_label(stateText(r.state))!
+            let st = cg_label(stateText(r.state) + (r.change.isEmpty ? "" : "   " + r.change))!
             cg_label_ellipsize(st)
             cg_css_class(st, "caption")
             cg_append(text, st)

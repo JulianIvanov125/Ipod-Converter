@@ -796,6 +796,21 @@ struct ItemCard: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
 
+            if let done = item.outputInfo {
+                // Готово: настоящие параметры готового файла (перечитан после конвертации), а не план.
+                SpecColumn(header: "\(L.convertedHeader) · \(target.title)" + (ts.isMax ? " · \(L.maximum)" : ""),
+                           accessory: nil, rows: [
+                    (L.resolution, "\(done.displayWidth)×\(done.displayHeight)"),
+                    (L.quality, ([done.videoCodec, done.videoProfile].compactMap { $0 }.joined(separator: " "))
+                        + (done.videoBitrate.map { " · " + Fmt.kbps($0 / 1000) } ?? "")),
+                    (L.size, Fmt.bytes(done.fileSize)),
+                    (L.format, done.hasAudio
+                        ? "\(ts.container.rawValue.uppercased()) · \(done.audioCodec ?? "AAC")"
+                            + (done.audioBitrate.map { " \($0 / 1000) \(L.kbps)" } ?? "")
+                            + (done.audioSampleRate.map { " · \($0 == 44100 ? "44.1" : String($0 / 1000)) \(L.kHz)" } ?? "")
+                        : "\(ts.container.rawValue.uppercased()) · \(L.noAudio)"),
+                ], highlighted: true)
+            } else {
             SpecColumn(header: "\(L.after) · \(target.title)" + (ts.isMax ? " · \(L.maximum)" : "")
                             + (item.outputOverride != nil ? " · \(L.customMark)" : ""),
                        accessory: store.map { st in AnyView(ItemOutputButton(item: item, store: st)) }, rows: [
@@ -806,6 +821,7 @@ struct ItemCard: View {
                     ? "\(ts.container.rawValue.uppercased()) · AAC \(ts.audioKbps) \(L.kbps) · \(ts.audioRate == 44100 ? "44.1" : "48") \(L.kHz)"
                     : "\(ts.container.rawValue.uppercased()) · \(L.noAudio)"),
             ], highlighted: true)
+            }
         }
     }
 

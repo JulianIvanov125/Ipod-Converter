@@ -26,6 +26,8 @@ final class LinuxVideo: VideoDupItem {
     var info: MediaInfo?
     var meta: VideoMeta?
     var cover: URL?
+    /// Готовый файл, перечитанный после конвертации, — для «было → стало».
+    var outInfo: MediaInfo?
     var state: LinuxItemState = .loading
     var checked = true
     init(url: URL) { self.url = url }
@@ -36,6 +38,7 @@ final class LinuxTrack {
     let id = UUID()
     let url: URL
     var info: AudioInfo?
+    var outInfo: AudioInfo?
     var state: LinuxItemState = .loading
     var checked = true
     init(url: URL) { self.url = url }
@@ -279,6 +282,7 @@ final class LinuxEngine {
                                     cover: v.cover, meta: meta, ipod: model.playlistName, preparedAudio: audio)
         let (status, err) = await run(ffmpeg, args, duration: info.duration) { p in v.state = .converting(p) }
         if status == 0 && !cancelRequested {
+            v.outInfo = try? await FFmpeg.probe(output)
             v.state = .done(output)
             onChange?()
             return true
@@ -314,6 +318,7 @@ final class LinuxEngine {
         onChange?()
         let (status, err) = await run(ffmpeg, args, duration: info.duration) { p in t.state = .converting(p) }
         if status == 0 && !cancelRequested {
+            t.outInfo = try? await FFmpeg.probeAudio(output)
             t.state = .done(output)
             onChange?()
             return true

@@ -448,6 +448,11 @@ enum L {
         t("or click to choose · FLAC, OGG, Opus, WMA, APE, MP3…", "или нажмите, чтобы выбрать · FLAC, OGG, Opus, WMA, APE, MP3…",
           "або натисніть, щоб вибрати · FLAC, OGG, Opus, WMA, APE, MP3…", "або націсніце, каб выбраць · FLAC, OGG, Opus, WMA, APE, MP3…")
     }
+    static var convertedHeader: String { t("Converted", "Готово", "Готово", "Гатова") }
+    static var beforeAfterHelp: String {
+        t("Before conversion → in the converted file", "Было до конвертации → в готовом файле",
+          "Було до конвертації → у готовому файлі", "Было да канвертацыі → у гатовым файле")
+    }
     static func convertN(_ n: Int) -> String { t("Convert (\(n))", "Конвертировать (\(n))", "Конвертувати (\(n))", "Канвертаваць (\(n))") }
     static var notAudio: String { t("No audio track in the file", "В файле нет звуковой дорожки", "У файлі немає звукової доріжки", "У файле няма гукавой дарожкі") }
     static var chooseTracks: String { t("Choose tracks or folders to convert", "Выберите треки или папки для конвертации", "Виберіть треки або теки для конвертації", "Выберыце трэкі або папкі для канвертацыі") }

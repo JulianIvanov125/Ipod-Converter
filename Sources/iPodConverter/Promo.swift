@@ -77,6 +77,16 @@ enum Promo {
         store.section = .music
         await sleep(0.8)
         snap(host, out.appendingPathComponent("1-music.png"))
+        // «Было → стало»: два трека в AAC во временную папку (без «Музыки» и окна выбора папки) и снимок.
+        let convDir = out.appendingPathComponent("converted", isDirectory: true)
+        for t in store.tracks.prefix(2) {
+            t.viewModel = store.model
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                t.convert(plan: .aac(rate: 44100, kbps: 256), model: store.model, into: convDir) { _ in c.resume() }
+            }
+        }
+        await sleep(1.5)
+        snap(host, out.appendingPathComponent("1b-music-converted.png"))
 
         // Видео
         store.add([videos])
@@ -84,6 +94,14 @@ enum Promo {
         while store.items.contains(where: { $0.info == nil }) { await sleep(0.3) }
         await sleep(2.5)
         snap(host, out.appendingPathComponent("2-videos.png"))
+        // «Было → стало» для видео: первое видео — во временную папку, без «Музыки».
+        if let v = store.items.first {
+            v.viewModel = store.model
+            v.convert(model: store.model, settings: store.settings(for: v), videoRoot: convDir, addToMusic: false)
+            while v.isConverting { await sleep(0.5) }
+            await sleep(2)
+            snap(host, out.appendingPathComponent("2a-video-converted.png"))
+        }
         // Окно «Выход» (настройки видео) — отдельным видом: поповер так не снять.
         let outView = NSHostingView(rootView: OutputSettingsView(store: store).background(Color(nsColor: .windowBackgroundColor)))
         outView.frame = NSRect(origin: .zero, size: outView.fittingSize)

@@ -22,6 +22,10 @@ struct MediaInfo {
     var audioStreamIndex: Int?
     /// Чересстрочное видео (DVD, ТВ-записи) — нужен деинтерлейс.
     var interlaced = false
+    /// Профиль видео («Main», «Constrained Baseline»…), битрейт и частота звука — для «было → стало».
+    var videoProfile: String?
+    var audioBitrate: Int?      // бит/с
+    var audioSampleRate: Int?
 }
 
 enum FFmpegError: LocalizedError {
@@ -146,7 +150,10 @@ enum FFmpeg {
             coverStreamIndex: cover?.index,
             tags: fmtTags,
             audioStreamIndex: (probe.streams.first { $0.codec_type == "audio" && ($0.disposition?["default"] ?? 0) == 1 } ?? a)?.index,
-            interlaced: ["tt", "bb", "tb", "bt"].contains(v.field_order ?? "")
+            interlaced: ["tt", "bb", "tb", "bt"].contains(v.field_order ?? ""),
+            videoProfile: v.profile,
+            audioBitrate: a.flatMap { Int($0.bit_rate ?? "") },
+            audioSampleRate: a.flatMap { Int($0.sample_rate ?? "") }
         )
     }
 
