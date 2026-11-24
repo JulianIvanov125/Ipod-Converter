@@ -34,12 +34,15 @@ page — see [Windows](#windows) and [Linux](#linux).
   deinterlaces DVD/TV recordings
 - Sorts files into music videos, films and TV series with proper iTunes tags; series are grouped by
   show and season — episode names are parsed in English, Russian, Ukrainian and Belarusian
-  (`S01E02`, `1x02`, `Season 1 Episode 2`, `Сезон 1 Серия 2`, `1 сезон 2 серія` …)
+  (`S01E02`, `1x02`, `Season 1 Episode 2`, `Сезон 1 Серия 2`, `1 сезон 2 серія` …), anime-style numbering
+  (`Show - 05`, `Show_[252]_[1080p]`) and double episodes (`Show - 101-102`)
 - Checkboxes, type filter, change the type of many videos at once
 - Custom output settings on top of the preset: MP4/MOV, HEVC, up to 1080p, video and audio bitrate
 - Output files are named with the target, e.g. `Lost S01E01 [iPod 5.5G].m4v`; leftovers of older conversions
   (`_ipod5g_480`, "Unknown Artist" tags) are cleaned up
 - Big batches run as a queue (two videos at a time) with an overall progress bar
+- Approximate time next to Convert — "≈ 3 min" before you start, "≈ 2 min left" while it runs (music too);
+  it learns how fast your Mac converts
 - Before → after: converted files are read back and show their real resolution, bitrate, audio and size
 - Duplicates filter for videos: the same music video, film or episode added twice (ignoring tails like `_ipod5g_480`,
   `[iPod nano 7]` or `(Official Video)`) — the best copy stays, extras go to the Trash; versions made for different
@@ -61,6 +64,8 @@ page — see [Windows](#windows) and [Linux](#linux).
 
 **Player**
 - Preview originals and converted files; mini player for video, Apple Music–style bar for tracks
+- MKV, AVI and other files macOS can't open itself start playing in about a second, even 8 GB films —
+  they are streamed while being prepared, and you can jump anywhere
 - Full screen with synced lyrics (.lrc, file tags or LRCLIB) and visualizers that follow the song's dynamics:
   a 20 Hz – 20 kHz equalizer, a water-ripple simulation tinted by the cover, and flowing cover colors
 - Volume, repeat, shuffle; shows up in macOS Now Playing and reacts to media keys
@@ -68,8 +73,9 @@ page — see [Windows](#windows) and [Linux](#linux).
 **Your iPods**
 - Connected iPods are detected automatically and shown under their own names (e.g. "Alex's iPod nano"),
   with capacity and free space; the bottom bar tells you whether the converted files will fit
-- Some models report the same ID (iPod 5G and 5.5G, modded iPods with an empty SysInfo) — pick the right one
-  with the ⌄ button on the iPod tab
+- iPod 5G and 5.5G report the same ID; the app tells them apart by the serial number macOS keeps for iPods
+  it has seen (also for modded iPods with an empty SysInfo). If it can't, pick the right one with the ⌄ button
+  on the iPod tab
 - Every iPod tab keeps its own state — what was converted, what failed — so converting for one iPod
   doesn't mark files as done for another
 
