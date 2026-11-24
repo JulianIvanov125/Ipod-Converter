@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=iPod Converter
+GenericName=Converter for iPod
+GenericName[ru]=Конвертер для iPod
+GenericName[uk]=Конвертер для iPod
+Comment=Convert music and videos for iPod classic, nano and touch
+Comment[ru]=Конвертирует музыку и видео для iPod classic, nano и touch
+Comment[uk]=Конвертує музику та відео для iPod classic, nano і touch
+Exec=ipod-converter %F
+Icon=io.github.ipodconverter.linux
+Terminal=false
+Categories=AudioVideo;AudioVideoEditing;
+Keywords=ipod;convert;video;music;ffmpeg;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/ogg;audio/x-wav;audio/aac;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;
+StartupNotify=true

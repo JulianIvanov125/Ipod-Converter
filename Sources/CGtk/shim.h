@@ -43,6 +43,7 @@ static inline GtkWidget *cg_window(GtkApplication *app, const char *title, int w
     GtkWidget *win = adw_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(win), title);
     gtk_window_set_default_size(GTK_WINDOW(win), w, h);
+    gtk_window_set_icon_name(GTK_WINDOW(win), "io.github.ipodconverter.linux");
     return win;
 }
 static inline void cg_window_set_content(GtkWidget *win, GtkWidget *child) {

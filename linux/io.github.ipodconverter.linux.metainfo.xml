@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ipodconverter.linux</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>iPod Converter</name>
+  <developer id="io.github.julianivanov125">
+    <name>Julian Ivanov</name>
+  </developer>
+  <summary>Convert music and videos for classic iPods</summary>
+  <description>
+    <p>Converts videos and music so they play on iPod 5G/5.5G, iPod classic, iPod nano and iPod touch:
+    the right resolution and H.264 profile for each model (Standard or Maximum quality), AAC audio without clipping,
+    tags and covers kept. Finds duplicate videos and moves extra copies to the Trash.</p>
+    <p>Converted files go to an output folder; copy them to the iPod with Rhythmbox, gtkpod or Strawberry.</p>
+  </description>
+  <launchable type="desktop-id">io.github.ipodconverter.linux.desktop</launchable>
+  <url type="homepage">https://github.com/JulianIvanov125/Ipod-Converter</url>
+  <url type="bugtracker">https://github.com/JulianIvanov125/Ipod-Converter/issues</url>
+  <content_rating type="oars-1.1"/>
+</component>
