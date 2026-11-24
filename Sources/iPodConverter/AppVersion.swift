@@ -3,7 +3,7 @@ import Foundation
 /// Версия программы. На Mac — из Info.plist; на Linux и Windows Info.plist в программе нет,
 /// поэтому номер вшит константой — release.sh обновляет его вместе с Info.plist.
 enum AppVersion {
-    static let embedded = "1.5.1"
+    static let embedded = "1.5.2"
 
     static var current: String {
         #if os(macOS)
