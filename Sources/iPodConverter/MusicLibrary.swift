@@ -146,7 +146,7 @@ enum MusicLibrary {
     private static let tvScript = """
     on run argv
         set pName to item 1 of argv
-        set kind to item 2 of argv
+        set vKind to item 2 of argv
         set f to POSIX file (item 6 of argv)
         tell application "TV"
             if not (exists user playlist pName) then
@@ -154,7 +154,7 @@ enum MusicLibrary {
             end if
             set t to add f to user playlist pName
             try
-                if kind is "tv" then
+                if vKind is "tv" then
                     set media kind of t to TV show
                     set show of t to (item 3 of argv)
                     set season number of t to ((item 4 of argv) as integer)
